@@ -36,6 +36,9 @@ dev = [
     "testcontainers>=3.7.0",
     "httpx>=0.26.0",
 ]
+ui = [
+    "streamlit>=1.30.0",
+]
 
 [project.scripts]
 pysandbox = "pysandbox.cli.main:app"
