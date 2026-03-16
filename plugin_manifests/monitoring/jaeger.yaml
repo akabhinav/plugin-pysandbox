@@ -1,0 +1,33 @@
+id: jaeger
+version: "1.0.0"
+display_name: "Jaeger"
+description: "Jaeger distributed tracing platform"
+category: monitoring
+tags: [monitoring, tracing, distributed, jaeger]
+docker_image: "jaegertracing/all-in-one:{version}"
+supported_versions: ["latest", "1.53", "1.52", "1.51"]
+default_version: "latest"
+ports:
+  - port: 16686
+    protocol: tcp
+    name: ui
+  - port: 14268
+    protocol: tcp
+    name: collector
+resources:
+  cpu: "0.5"
+  memory: "512m"
+  disk_gb: 2.0
+health_check:
+  type: http
+  port: 16686
+  path: "/"
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 10
+config_params: []
+depends_on: []
+startup_order: 70
+generates_credentials: false
+persistent_data: false
+supports_hot_reload: false

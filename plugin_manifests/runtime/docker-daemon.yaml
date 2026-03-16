@@ -1,0 +1,29 @@
+id: docker-daemon
+version: "1.0.0"
+display_name: "Docker Daemon"
+description: "Docker-in-Docker daemon for container operations"
+category: runtime
+tags: [runtime, docker, dind, containers]
+docker_image: "docker:{version}-dind"
+supported_versions: ["latest", "25", "24", "23"]
+default_version: "latest"
+ports:
+  - port: 2376
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "1.0"
+  memory: "1024m"
+  disk_gb: 10.0
+health_check:
+  type: tcp
+  port: 2376
+  interval_seconds: 10
+  timeout_seconds: 5
+  retries: 15
+config_params: []
+depends_on: []
+startup_order: 30
+generates_credentials: true
+persistent_data: false
+supports_hot_reload: false

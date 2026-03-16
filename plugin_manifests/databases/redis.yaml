@@ -1,0 +1,29 @@
+id: redis
+version: "1.0.0"
+display_name: "Redis"
+description: "Redis in-memory data store and cache"
+category: databases
+tags: [database, cache, key-value, redis]
+docker_image: "redis:{version}-alpine"
+supported_versions: ["latest", "7", "6"]
+default_version: "latest"
+ports:
+  - port: 6379
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "0.25"
+  memory: "256m"
+  disk_gb: 1.0
+health_check:
+  type: tcp
+  port: 6379
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 10
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: false
+persistent_data: true
+supports_hot_reload: false

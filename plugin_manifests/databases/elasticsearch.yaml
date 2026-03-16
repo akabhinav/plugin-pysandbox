@@ -1,0 +1,30 @@
+id: elasticsearch
+version: "1.0.0"
+display_name: "Elasticsearch"
+description: "Elasticsearch distributed search and analytics engine"
+category: databases
+tags: [database, search, analytics, elasticsearch]
+docker_image: "docker.elastic.co/elasticsearch/elasticsearch:{version}"
+supported_versions: ["latest", "8.12.0", "8.11.0", "7.17.0"]
+default_version: "latest"
+ports:
+  - port: 9200
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "1.0"
+  memory: "1024m"
+  disk_gb: 5.0
+health_check:
+  type: http
+  port: 9200
+  path: "/_cluster/health"
+  interval_seconds: 10
+  timeout_seconds: 5
+  retries: 15
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: true
+persistent_data: true
+supports_hot_reload: false

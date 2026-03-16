@@ -1,0 +1,29 @@
+id: cassandra
+version: "1.0.0"
+display_name: "Cassandra"
+description: "Apache Cassandra distributed NoSQL database"
+category: databases
+tags: [database, nosql, distributed, cassandra]
+docker_image: "cassandra:{version}"
+supported_versions: ["latest", "4.1", "4.0", "3.11"]
+default_version: "latest"
+ports:
+  - port: 9042
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "1.0"
+  memory: "1024m"
+  disk_gb: 5.0
+health_check:
+  type: tcp
+  port: 9042
+  interval_seconds: 10
+  timeout_seconds: 5
+  retries: 15
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: false
+persistent_data: true
+supports_hot_reload: false

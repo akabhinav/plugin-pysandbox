@@ -1,0 +1,32 @@
+id: kafka
+version: "1.0.0"
+display_name: "Apache Kafka"
+description: "Apache Kafka distributed event streaming platform"
+category: messaging
+tags: [messaging, streaming, event, kafka]
+docker_image: "confluentinc/cp-kafka:{version}"
+supported_versions: ["latest", "7.6.0", "7.5.0", "7.4.0"]
+default_version: "latest"
+ports:
+  - port: 9092
+    protocol: tcp
+    name: plaintext
+  - port: 9093
+    protocol: tcp
+    name: controller
+resources:
+  cpu: "1.0"
+  memory: "1024m"
+  disk_gb: 5.0
+health_check:
+  type: tcp
+  port: 9092
+  interval_seconds: 10
+  timeout_seconds: 5
+  retries: 15
+config_params: []
+depends_on: []
+startup_order: 60
+generates_credentials: false
+persistent_data: true
+supports_hot_reload: false

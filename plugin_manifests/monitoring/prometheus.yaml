@@ -1,0 +1,30 @@
+id: prometheus
+version: "1.0.0"
+display_name: "Prometheus"
+description: "Prometheus monitoring and alerting toolkit"
+category: monitoring
+tags: [monitoring, metrics, alerting, prometheus]
+docker_image: "prom/prometheus:{version}"
+supported_versions: ["latest", "v2.49.0", "v2.48.0", "v2.47.0"]
+default_version: "latest"
+ports:
+  - port: 9090
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "0.5"
+  memory: "512m"
+  disk_gb: 5.0
+health_check:
+  type: http
+  port: 9090
+  path: "/-/healthy"
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 10
+config_params: []
+depends_on: []
+startup_order: 40
+generates_credentials: false
+persistent_data: true
+supports_hot_reload: true

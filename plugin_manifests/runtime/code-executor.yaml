@@ -1,0 +1,26 @@
+id: code-executor
+version: "1.0.0"
+display_name: "Code Executor"
+description: "Python code execution sandbox runtime"
+category: runtime
+tags: [runtime, python, executor, sandbox]
+docker_image: "python:{version}-slim"
+supported_versions: ["latest", "3.12", "3.11", "3.10"]
+default_version: "latest"
+ports: []
+resources:
+  cpu: "0.5"
+  memory: "512m"
+  disk_gb: 2.0
+health_check:
+  type: exec
+  command: ["python", "--version"]
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 5
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: false
+persistent_data: false
+supports_hot_reload: true

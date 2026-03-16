@@ -1,0 +1,30 @@
+id: localstack
+version: "1.0.0"
+display_name: "LocalStack"
+description: "LocalStack local AWS cloud emulator"
+category: cloud
+tags: [cloud, aws, emulator, localstack]
+docker_image: "localstack/localstack:{version}"
+supported_versions: ["latest", "3.0", "2.3", "2.2"]
+default_version: "latest"
+ports:
+  - port: 4566
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "1.0"
+  memory: "1024m"
+  disk_gb: 5.0
+health_check:
+  type: http
+  port: 4566
+  path: "/_localstack/health"
+  interval_seconds: 10
+  timeout_seconds: 5
+  retries: 15
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: true
+persistent_data: false
+supports_hot_reload: false

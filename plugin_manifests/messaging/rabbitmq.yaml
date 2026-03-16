@@ -1,0 +1,32 @@
+id: rabbitmq
+version: "1.0.0"
+display_name: "RabbitMQ"
+description: "RabbitMQ message broker with management UI"
+category: messaging
+tags: [messaging, amqp, broker, rabbitmq]
+docker_image: "rabbitmq:{version}-management-alpine"
+supported_versions: ["latest", "3.13", "3.12", "3.11"]
+default_version: "latest"
+ports:
+  - port: 5672
+    protocol: tcp
+    name: amqp
+  - port: 15672
+    protocol: tcp
+    name: management
+resources:
+  cpu: "0.5"
+  memory: "512m"
+  disk_gb: 2.0
+health_check:
+  type: tcp
+  port: 5672
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 10
+config_params: []
+depends_on: []
+startup_order: 60
+generates_credentials: true
+persistent_data: true
+supports_hot_reload: false

@@ -1,0 +1,26 @@
+id: sqlite
+version: "1.0.0"
+display_name: "SQLite"
+description: "SQLite lightweight embedded SQL database"
+category: databases
+tags: [database, sql, embedded, sqlite]
+docker_image: "alpine:latest"
+supported_versions: ["latest"]
+default_version: "latest"
+ports: []
+resources:
+  cpu: "0.25"
+  memory: "128m"
+  disk_gb: 1.0
+health_check:
+  type: exec
+  command: ["sqlite3", "--version"]
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 5
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: false
+persistent_data: true
+supports_hot_reload: false

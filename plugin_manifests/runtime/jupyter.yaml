@@ -1,0 +1,30 @@
+id: jupyter
+version: "1.0.0"
+display_name: "Jupyter Notebook"
+description: "Jupyter SciPy notebook for interactive computing"
+category: runtime
+tags: [runtime, jupyter, notebook, python]
+docker_image: "jupyter/scipy-notebook:latest"
+supported_versions: ["latest"]
+default_version: "latest"
+ports:
+  - port: 8888
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "1.0"
+  memory: "1024m"
+  disk_gb: 5.0
+health_check:
+  type: http
+  port: 8888
+  path: "/api/status"
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 10
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: true
+persistent_data: true
+supports_hot_reload: true

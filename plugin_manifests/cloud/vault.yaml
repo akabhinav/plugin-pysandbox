@@ -1,0 +1,30 @@
+id: vault
+version: "1.0.0"
+display_name: "HashiCorp Vault"
+description: "HashiCorp Vault secrets management"
+category: cloud
+tags: [cloud, secrets, security, vault]
+docker_image: "hashicorp/vault:{version}"
+supported_versions: ["latest", "1.15", "1.14", "1.13"]
+default_version: "latest"
+ports:
+  - port: 8200
+    protocol: tcp
+    name: primary
+resources:
+  cpu: "0.5"
+  memory: "512m"
+  disk_gb: 1.0
+health_check:
+  type: http
+  port: 8200
+  path: "/v1/sys/health"
+  interval_seconds: 5
+  timeout_seconds: 3
+  retries: 10
+config_params: []
+depends_on: []
+startup_order: 40
+generates_credentials: true
+persistent_data: true
+supports_hot_reload: false
