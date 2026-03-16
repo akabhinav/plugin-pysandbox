@@ -656,7 +656,7 @@ def page_plugin_detail():
         st.error(f"Plugin '{plugin_id}' not found")
         return
 
-    p = detail["plugin"]
+    p = detail
     cat = p.get("category", "other")
     icon = CATEGORY_ICONS.get(cat, "📦")
 
