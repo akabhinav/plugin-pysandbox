@@ -22,6 +22,13 @@ services:
     image: redis:7-alpine
     command: redis-server --requirepass ${REDIS_PASSWORD:-pysandbox-dev}
 
+  streamlit-ui:
+    build: ./ui
+    ports: ["8501:8501"]
+    environment:
+      API_BASE: "http://pysandbox-api:8080"
+    depends_on: [pysandbox-api]
+
   prometheus:
     image: prom/prometheus:latest
     ports: ["9090:9090"]

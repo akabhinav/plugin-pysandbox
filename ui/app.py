@@ -5,7 +5,9 @@ import time
 import httpx
 import streamlit as st
 
-API_BASE = "http://localhost:8080"
+import os
+
+API_BASE = os.getenv("API_BASE", "http://localhost:8080")
 
 
 # ── API Client ──────────────────────────────────────────────────────────────
