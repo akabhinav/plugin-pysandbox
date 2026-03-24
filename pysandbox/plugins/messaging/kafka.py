@@ -56,18 +56,26 @@ class KafkaPlugin(PluginDefinition):
             "SPRING_KAFKA_BOOTSTRAP_SERVERS": f"{host}:9092",
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        bootstrap = f"{plugin_name}.{dns_zone}:9092"
-        auth = {"username": credentials.get("username", ""), "password": credentials.get("password", "")}
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        bootstrap = f"localhost:9092"
         return [
-            AgentTool("kafka_produce", "Produce a message to a topic", KAFKA_PRODUCE_SCHEMA, make_kafka_produce(bootstrap, auth)),
-            AgentTool("kafka_consume", "Consume N messages from a topic", KAFKA_CONSUME_SCHEMA, make_kafka_consume(bootstrap, auth)),
-            AgentTool("kafka_list_topics", "List all Kafka topics", EMPTY_SCHEMA, make_kafka_list_topics(bootstrap, auth)),
-            AgentTool("kafka_create_topic", "Create a new topic", TOPIC_CREATE_SCHEMA, make_kafka_create_topic(bootstrap, auth)),
-            AgentTool("kafka_describe_topic", "Describe a topic", TOPIC_NAME_SCHEMA, make_kafka_describe_topic(bootstrap, auth)),
-            AgentTool("kafka_delete_topic", "Delete a topic", TOPIC_NAME_SCHEMA, make_kafka_delete_topic(bootstrap, auth)),
-            AgentTool("kafka_consumer_groups", "List consumer groups", EMPTY_SCHEMA, make_kafka_groups(bootstrap, auth)),
-            AgentTool("kafka_lag", "Get consumer group lag", GROUP_SCHEMA, make_kafka_lag(bootstrap, auth)),
+            AgentTool("kafka_produce", "Produce a message to a topic", KAFKA_PRODUCE_SCHEMA,
+                      make_kafka_produce(container_id, docker_runtime, bootstrap)),
+            AgentTool("kafka_consume", "Consume N messages from a topic", KAFKA_CONSUME_SCHEMA,
+                      make_kafka_consume(container_id, docker_runtime, bootstrap)),
+            AgentTool("kafka_list_topics", "List all Kafka topics", EMPTY_SCHEMA,
+                      make_kafka_list_topics(container_id, docker_runtime, bootstrap)),
+            AgentTool("kafka_create_topic", "Create a new topic", TOPIC_CREATE_SCHEMA,
+                      make_kafka_create_topic(container_id, docker_runtime, bootstrap)),
+            AgentTool("kafka_describe_topic", "Describe a topic", TOPIC_NAME_SCHEMA,
+                      make_kafka_describe_topic(container_id, docker_runtime, bootstrap)),
+            AgentTool("kafka_delete_topic", "Delete a topic", TOPIC_NAME_SCHEMA,
+                      make_kafka_delete_topic(container_id, docker_runtime, bootstrap)),
+            AgentTool("kafka_consumer_groups", "List consumer groups", EMPTY_SCHEMA,
+                      make_kafka_groups(container_id, docker_runtime, bootstrap)),
+            AgentTool("kafka_lag", "Get consumer group lag", GROUP_SCHEMA,
+                      make_kafka_lag(container_id, docker_runtime, bootstrap)),
         ]
 
     def generate_credentials(self, config):

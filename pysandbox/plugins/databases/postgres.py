@@ -11,14 +11,14 @@ from pysandbox.agent.tools.sql_tools import (
     SQL_MIGRATE_SCHEMA,
     SQL_QUERY_SCHEMA,
     TABLE_NAME_SCHEMA,
-    make_describe_table_handler,
-    make_dump_handler,
-    make_list_indexes_handler,
-    make_list_tables_handler,
-    make_sql_execute_handler,
-    make_sql_explain_handler,
-    make_sql_migrate_handler,
-    make_sql_query_handler,
+    make_pg_describe_table_handler,
+    make_pg_dump_handler,
+    make_pg_execute_handler,
+    make_pg_explain_handler,
+    make_pg_list_indexes_handler,
+    make_pg_list_tables_handler,
+    make_pg_migrate_handler,
+    make_pg_query_handler,
 )
 from pysandbox.plugin.base import AgentTool, PluginDefinition
 from pysandbox.plugin.registry import register_plugin
@@ -69,17 +69,27 @@ class PostgresPlugin(PluginDefinition):
             "SQLALCHEMY_DATABASE_URI": url,
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = self.get_env_vars(plugin_name, dns_zone, credentials, config)["POSTGRES_URL"]
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        user = credentials["user"]
+        database = credentials["database"]
         return [
-            AgentTool("sql_query", "Run a SQL SELECT query", SQL_QUERY_SCHEMA, make_sql_query_handler(url)),
-            AgentTool("sql_execute", "Run INSERT/UPDATE/DELETE/DDL", SQL_EXECUTE_SCHEMA, make_sql_execute_handler(url)),
-            AgentTool("sql_migrate", "Run a SQL migration", SQL_MIGRATE_SCHEMA, make_sql_migrate_handler(url)),
-            AgentTool("sql_explain", "EXPLAIN ANALYZE a query", SQL_EXPLAIN_SCHEMA, make_sql_explain_handler(url)),
-            AgentTool("db_list_tables", "List all tables", EMPTY_SCHEMA, make_list_tables_handler(url)),
-            AgentTool("db_describe_table", "Describe table schema", TABLE_NAME_SCHEMA, make_describe_table_handler(url)),
-            AgentTool("db_list_indexes", "List indexes on a table", TABLE_NAME_SCHEMA, make_list_indexes_handler(url)),
-            AgentTool("db_dump", "pg_dump the database", DUMP_SCHEMA, make_dump_handler(url)),
+            AgentTool("sql_query", "Run a SQL SELECT query", SQL_QUERY_SCHEMA,
+                      make_pg_query_handler(container_id, docker_runtime, user, database)),
+            AgentTool("sql_execute", "Run INSERT/UPDATE/DELETE/DDL", SQL_EXECUTE_SCHEMA,
+                      make_pg_execute_handler(container_id, docker_runtime, user, database)),
+            AgentTool("sql_migrate", "Run a SQL migration", SQL_MIGRATE_SCHEMA,
+                      make_pg_migrate_handler(container_id, docker_runtime, user, database)),
+            AgentTool("sql_explain", "EXPLAIN ANALYZE a query", SQL_EXPLAIN_SCHEMA,
+                      make_pg_explain_handler(container_id, docker_runtime, user, database)),
+            AgentTool("db_list_tables", "List all tables", EMPTY_SCHEMA,
+                      make_pg_list_tables_handler(container_id, docker_runtime, user, database)),
+            AgentTool("db_describe_table", "Describe table schema", TABLE_NAME_SCHEMA,
+                      make_pg_describe_table_handler(container_id, docker_runtime, user, database)),
+            AgentTool("db_list_indexes", "List indexes on a table", TABLE_NAME_SCHEMA,
+                      make_pg_list_indexes_handler(container_id, docker_runtime, user, database)),
+            AgentTool("db_dump", "pg_dump the database", DUMP_SCHEMA,
+                      make_pg_dump_handler(container_id, docker_runtime, user, database)),
         ]
 
     def generate_credentials(self, config):

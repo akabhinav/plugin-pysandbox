@@ -49,19 +49,18 @@ class MinIOPlugin(PluginDefinition):
             "AWS_SECRET_ACCESS_KEY": credentials["secret_key"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        host = f"{plugin_name}.{dns_zone}"
-        cfg = {
-            "endpoint_url": f"http://{host}:9000",
-            "aws_access_key_id": credentials["access_key"],
-            "aws_secret_access_key": credentials["secret_key"],
-        }
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        endpoint_url = "http://localhost:9000"
+        access_key = credentials["access_key"]
+        secret_key = credentials["secret_key"]
+        args = (container_id, docker_runtime, endpoint_url, access_key, secret_key)
         return [
-            AgentTool("s3_upload", "Upload to S3/MinIO", S3_UPLOAD_SCHEMA, make_s3_upload(cfg)),
-            AgentTool("s3_download", "Download from S3/MinIO", S3_DOWNLOAD_SCHEMA, make_s3_download(cfg)),
-            AgentTool("s3_list", "List objects", S3_LIST_SCHEMA, make_s3_list(cfg)),
-            AgentTool("s3_delete", "Delete object", S3_DELETE_SCHEMA, make_s3_delete(cfg)),
-            AgentTool("s3_presign", "Generate presigned URL", S3_PRESIGN_SCHEMA, make_s3_presign(cfg)),
+            AgentTool("s3_upload", "Upload to S3/MinIO", S3_UPLOAD_SCHEMA, make_s3_upload(*args)),
+            AgentTool("s3_download", "Download from S3/MinIO", S3_DOWNLOAD_SCHEMA, make_s3_download(*args)),
+            AgentTool("s3_list", "List objects", S3_LIST_SCHEMA, make_s3_list(*args)),
+            AgentTool("s3_delete", "Delete object", S3_DELETE_SCHEMA, make_s3_delete(*args)),
+            AgentTool("s3_presign", "Generate presigned URL", S3_PRESIGN_SCHEMA, make_s3_presign(*args)),
         ]
 
     def generate_credentials(self, config):

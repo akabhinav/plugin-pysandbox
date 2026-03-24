@@ -14,10 +14,8 @@ QUERY_SCHEMA = {
 }
 
 
-def _handler(name, url):
-    async def h(params):
-        return f"[{name}] url={url} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("prometheus")
@@ -51,12 +49,36 @@ class PrometheusPlugin(PluginDefinition):
             "PROMETHEUS_PORT": "9090",
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = f"http://{plugin_name}.{dns_zone}:9090"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+
+        def _make_query(cid, dr):
+            async def handler(params: dict) -> str:
+                query = _quote(params["query"])
+                cmd = f"wget -qO- 'http://localhost:9090/api/v1/query?query={query}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_query_range(cid, dr):
+            async def handler(params: dict) -> str:
+                query = _quote(params["query"])
+                cmd = f"wget -qO- 'http://localhost:9090/api/v1/query_range?query={query}&start=now-1h&end=now&step=15s'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_targets(cid, dr):
+            async def handler(params: dict) -> str:
+                cmd = "wget -qO- 'http://localhost:9090/api/v1/targets'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("prometheus_query", "Run a PromQL instant query", QUERY_SCHEMA, _handler("prometheus_query", url)),
-            AgentTool("prometheus_query_range", "Run a PromQL range query", QUERY_SCHEMA, _handler("prometheus_query_range", url)),
-            AgentTool("prometheus_targets", "List scrape targets", EMPTY_SCHEMA, _handler("prometheus_targets", url)),
+            AgentTool("prometheus_query", "Run a PromQL instant query", QUERY_SCHEMA,
+                      _make_query(container_id, docker_runtime)),
+            AgentTool("prometheus_query_range", "Run a PromQL range query", QUERY_SCHEMA,
+                      _make_query_range(container_id, docker_runtime)),
+            AgentTool("prometheus_targets", "List scrape targets", EMPTY_SCHEMA,
+                      _make_targets(container_id, docker_runtime)),
         ]
 
     def generate_credentials(self, config):
@@ -66,6 +88,4 @@ class PrometheusPlugin(PluginDefinition):
         return []
 
     def on_plugin_event(self, event_type, plugin_id, connection):
-        """Auto-add scrape targets when new plugins install."""
-        # In a full implementation, this would update prometheus.yml
         pass

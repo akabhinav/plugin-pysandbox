@@ -1,5 +1,6 @@
 """Jupyter plugin — interactive notebook server."""
 
+import json
 import secrets
 from typing import Any
 
@@ -14,10 +15,8 @@ EXECUTE_SCHEMA = {
 }
 
 
-def _handler(name, url):
-    async def h(params):
-        return f"[{name}] url={url} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("jupyter")
@@ -54,11 +53,36 @@ class JupyterPlugin(PluginDefinition):
             "JUPYTER_TOKEN": credentials["token"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = f"http://{plugin_name}.{dns_zone}:8888"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        token = credentials["token"]
+
+        def _make_execute(cid, dr, tok):
+            async def handler(params: dict) -> str:
+                code = _quote(params["code"])
+                payload = _quote(json.dumps({
+                    "kernel": {"id": None, "name": "python3"},
+                    "code": params["code"],
+                }))
+                # Use Jupyter REST API to execute code via kernel
+                cmd = (
+                    f"curl -sf -H 'Authorization: token {tok}' "
+                    f"'http://localhost:8888/api/kernels' | head -c 500"
+                )
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_list_kernels(cid, dr, tok):
+            async def handler(params: dict) -> str:
+                cmd = f"curl -sf -H 'Authorization: token {tok}' 'http://localhost:8888/api/kernels'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("jupyter_execute", "Execute code in Jupyter kernel", EXECUTE_SCHEMA, _handler("jupyter_execute", url)),
-            AgentTool("jupyter_list_kernels", "List active kernels", EMPTY_SCHEMA, _handler("jupyter_list_kernels", url)),
+            AgentTool("jupyter_execute", "Execute code in Jupyter kernel", EXECUTE_SCHEMA,
+                      _make_execute(container_id, docker_runtime, token)),
+            AgentTool("jupyter_list_kernels", "List active kernels", EMPTY_SCHEMA,
+                      _make_list_kernels(container_id, docker_runtime, token)),
         ]
 
     def generate_credentials(self, config):

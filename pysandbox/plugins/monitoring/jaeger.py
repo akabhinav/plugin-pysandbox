@@ -17,10 +17,8 @@ TRACE_SCHEMA = {
 }
 
 
-def _handler(name, url):
-    async def h(params):
-        return f"[{name}] url={url} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("jaeger")
@@ -50,11 +48,28 @@ class JaegerPlugin(PluginDefinition):
             "OTEL_EXPORTER_OTLP_ENDPOINT": f"http://{host}:4317",
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = f"http://{plugin_name}.{dns_zone}:16686"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+
+        def _make_traces(cid, dr):
+            async def handler(params: dict) -> str:
+                service = _quote(params["service"])
+                limit = params.get("limit", 20)
+                cmd = f"wget -qO- 'http://localhost:16686/api/traces?service={service}&limit={limit}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_services(cid, dr):
+            async def handler(params: dict) -> str:
+                cmd = "wget -qO- 'http://localhost:16686/api/services'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("jaeger_traces", "Search traces", TRACE_SCHEMA, _handler("jaeger_traces", url)),
-            AgentTool("jaeger_services", "List traced services", EMPTY_SCHEMA, _handler("jaeger_services", url)),
+            AgentTool("jaeger_traces", "Search traces", TRACE_SCHEMA,
+                      _make_traces(container_id, docker_runtime)),
+            AgentTool("jaeger_services", "List traced services", EMPTY_SCHEMA,
+                      _make_services(container_id, docker_runtime)),
         ]
 
     def generate_credentials(self, config):

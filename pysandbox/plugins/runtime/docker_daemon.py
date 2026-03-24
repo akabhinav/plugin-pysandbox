@@ -40,12 +40,15 @@ class DockerDaemonPlugin(PluginDefinition):
             "DOCKER_DAEMON_PORT": "2376",
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        # Tools use exec into the DinD container
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
         return [
-            AgentTool("docker_run", "Run a Docker container", DOCKER_RUN_SCHEMA, _placeholder("docker_run")),
-            AgentTool("docker_build", "Build a Docker image", DOCKER_BUILD_SCHEMA, _placeholder("docker_build")),
-            AgentTool("docker_ps", "List running containers", EMPTY_SCHEMA, _placeholder("docker_ps")),
+            AgentTool("docker_run", "Run a Docker container", DOCKER_RUN_SCHEMA,
+                      make_docker_run(container_id, docker_runtime)),
+            AgentTool("docker_build", "Build a Docker image", DOCKER_BUILD_SCHEMA,
+                      make_docker_build(container_id, docker_runtime)),
+            AgentTool("docker_ps", "List running containers", EMPTY_SCHEMA,
+                      make_docker_ps(container_id, docker_runtime)),
         ]
 
     def generate_credentials(self, config):
@@ -53,9 +56,3 @@ class DockerDaemonPlugin(PluginDefinition):
 
     def get_init_commands(self, plugin_name, credentials, config):
         return []
-
-
-def _placeholder(name):
-    async def handler(params):
-        return f"[{name}] params={params}"
-    return handler

@@ -1,5 +1,6 @@
 """RabbitMQ plugin — message broker with management UI."""
 
+import json
 import secrets
 from typing import Any
 
@@ -31,10 +32,8 @@ QUEUE_SCHEMA = {
 }
 
 
-def _handler(name, host):
-    async def h(params):
-        return f"[{name}] host={host} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("rabbitmq")
@@ -72,14 +71,59 @@ class RabbitMQPlugin(PluginDefinition):
             "AMQP_URL": amqp_url,
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        host = f"{plugin_name}.{dns_zone}"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        user = credentials["user"]
+        password = credentials["password"]
+
+        def _make_publish(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                exchange = _quote(params.get("exchange", ""))
+                routing_key = _quote(params["routing_key"])
+                message = _quote(params["message"])
+                cmd = f"rabbitmqadmin -u {u} -p {p} publish exchange='{exchange}' routing_key='{routing_key}' payload='{message}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_consume(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                queue = _quote(params["queue"])
+                count = params.get("count", 1)
+                cmd = f"rabbitmqadmin -u {u} -p {p} get queue='{queue}' count={count}"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_create_queue(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                queue = _quote(params["queue"])
+                cmd = f"rabbitmqadmin -u {u} -p {p} declare queue name='{queue}' durable=true"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_list_queues(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                cmd = f"rabbitmqadmin -u {u} -p {p} list queues"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_delete_queue(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                queue = _quote(params["queue"])
+                cmd = f"rabbitmqadmin -u {u} -p {p} delete queue name='{queue}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("rabbitmq_publish", "Publish a message", PUBLISH_SCHEMA, _handler("rabbitmq_publish", host)),
-            AgentTool("rabbitmq_consume", "Consume messages from queue", CONSUME_SCHEMA, _handler("rabbitmq_consume", host)),
-            AgentTool("rabbitmq_create_queue", "Declare a queue", QUEUE_SCHEMA, _handler("rabbitmq_create_queue", host)),
-            AgentTool("rabbitmq_list_queues", "List all queues", EMPTY_SCHEMA, _handler("rabbitmq_list_queues", host)),
-            AgentTool("rabbitmq_delete_queue", "Delete a queue", QUEUE_SCHEMA, _handler("rabbitmq_delete_queue", host)),
+            AgentTool("rabbitmq_publish", "Publish a message", PUBLISH_SCHEMA,
+                      _make_publish(container_id, docker_runtime, user, password)),
+            AgentTool("rabbitmq_consume", "Consume messages from queue", CONSUME_SCHEMA,
+                      _make_consume(container_id, docker_runtime, user, password)),
+            AgentTool("rabbitmq_create_queue", "Declare a queue", QUEUE_SCHEMA,
+                      _make_create_queue(container_id, docker_runtime, user, password)),
+            AgentTool("rabbitmq_list_queues", "List all queues", EMPTY_SCHEMA,
+                      _make_list_queues(container_id, docker_runtime, user, password)),
+            AgentTool("rabbitmq_delete_queue", "Delete a queue", QUEUE_SCHEMA,
+                      _make_delete_queue(container_id, docker_runtime, user, password)),
         ]
 
     def generate_credentials(self, config):

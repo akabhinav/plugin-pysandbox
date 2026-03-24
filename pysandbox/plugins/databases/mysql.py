@@ -5,8 +5,8 @@ from typing import Any
 
 from pysandbox.agent.tools.sql_tools import (
     EMPTY_SCHEMA, SQL_EXECUTE_SCHEMA, SQL_QUERY_SCHEMA, TABLE_NAME_SCHEMA,
-    make_describe_table_handler, make_list_tables_handler,
-    make_sql_execute_handler, make_sql_query_handler,
+    make_mysql_describe_table_handler, make_mysql_execute_handler,
+    make_mysql_list_tables_handler, make_mysql_query_handler,
 )
 from pysandbox.plugin.base import AgentTool, PluginDefinition
 from pysandbox.plugin.registry import register_plugin
@@ -47,13 +47,20 @@ class MySQLPlugin(PluginDefinition):
             "MYSQL_PASSWORD": credentials["password"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = self.get_env_vars(plugin_name, dns_zone, credentials, config)["MYSQL_URL"]
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        user = credentials["user"]
+        password = credentials["password"]
+        database = credentials["database"]
         return [
-            AgentTool("sql_query", "Run a SQL SELECT query", SQL_QUERY_SCHEMA, make_sql_query_handler(url)),
-            AgentTool("sql_execute", "Run INSERT/UPDATE/DELETE/DDL", SQL_EXECUTE_SCHEMA, make_sql_execute_handler(url)),
-            AgentTool("db_list_tables", "List all tables", EMPTY_SCHEMA, make_list_tables_handler(url)),
-            AgentTool("db_describe_table", "Describe table schema", TABLE_NAME_SCHEMA, make_describe_table_handler(url)),
+            AgentTool("sql_query", "Run a SQL SELECT query", SQL_QUERY_SCHEMA,
+                      make_mysql_query_handler(container_id, docker_runtime, user, password, database)),
+            AgentTool("sql_execute", "Run INSERT/UPDATE/DELETE/DDL", SQL_EXECUTE_SCHEMA,
+                      make_mysql_execute_handler(container_id, docker_runtime, user, password, database)),
+            AgentTool("db_list_tables", "List all tables", EMPTY_SCHEMA,
+                      make_mysql_list_tables_handler(container_id, docker_runtime, user, password, database)),
+            AgentTool("db_describe_table", "Describe table schema", TABLE_NAME_SCHEMA,
+                      make_mysql_describe_table_handler(container_id, docker_runtime, user, password, database)),
         ]
 
     def generate_credentials(self, config):

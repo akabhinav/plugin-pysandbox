@@ -14,10 +14,8 @@ CYPHER_SCHEMA = {
 }
 
 
-def _handler(name, url):
-    async def h(params):
-        return f"[{name}] url={url} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("neo4j")
@@ -52,12 +50,38 @@ class Neo4jPlugin(PluginDefinition):
             "NEO4J_PASSWORD": credentials["password"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = self.get_env_vars(plugin_name, dns_zone, credentials, config)["NEO4J_URI"]
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        user = credentials["user"]
+        password = credentials["password"]
+
+        def _make_cypher_query(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                query = _quote(params["query"])
+                cmd = f"cypher-shell -u {u} -p {p} '{query}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_cypher_execute(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                query = _quote(params["query"])
+                cmd = f"cypher-shell -u {u} -p {p} '{query}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_schema(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                cmd = f"cypher-shell -u {u} -p {p} 'CALL db.schema.visualization()'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("cypher_query", "Run a Cypher query", CYPHER_SCHEMA, _handler("cypher_query", url)),
-            AgentTool("cypher_execute", "Run a Cypher write query", CYPHER_SCHEMA, _handler("cypher_execute", url)),
-            AgentTool("neo4j_schema", "Get database schema", EMPTY_SCHEMA, _handler("neo4j_schema", url)),
+            AgentTool("cypher_query", "Run a Cypher query", CYPHER_SCHEMA,
+                      _make_cypher_query(container_id, docker_runtime, user, password)),
+            AgentTool("cypher_execute", "Run a Cypher write query", CYPHER_SCHEMA,
+                      _make_cypher_execute(container_id, docker_runtime, user, password)),
+            AgentTool("neo4j_schema", "Get database schema", EMPTY_SCHEMA,
+                      _make_schema(container_id, docker_runtime, user, password)),
         ]
 
     def generate_credentials(self, config):

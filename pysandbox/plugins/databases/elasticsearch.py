@@ -1,5 +1,6 @@
 """Elasticsearch plugin — search and analytics engine."""
 
+import json
 import secrets
 from typing import Any
 
@@ -30,10 +31,8 @@ INDEX_NAME_SCHEMA = {
 }
 
 
-def _handler(name, url):
-    async def h(params):
-        return f"[{name}] url={url} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("elasticsearch")
@@ -69,14 +68,57 @@ class ElasticsearchPlugin(PluginDefinition):
             "ELASTICSEARCH_PASSWORD": credentials["password"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = self.get_env_vars(plugin_name, dns_zone, credentials, config)["ELASTICSEARCH_URL"]
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        password = credentials["password"]
+        auth = f"-u elastic:{password}"
+
+        def _make_search(cid, dr, auth_flag):
+            async def handler(params: dict) -> str:
+                index = params["index"]
+                query = _quote(json.dumps(params["query"]))
+                cmd = f"curl -sf {auth_flag} -H 'Content-Type: application/json' 'http://localhost:9200/{index}/_search' -d '{query}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_index_doc(cid, dr, auth_flag):
+            async def handler(params: dict) -> str:
+                index = params["index"]
+                doc = _quote(json.dumps(params["document"]))
+                cmd = f"curl -sf {auth_flag} -H 'Content-Type: application/json' -X POST 'http://localhost:9200/{index}/_doc' -d '{doc}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_delete_index(cid, dr, auth_flag):
+            async def handler(params: dict) -> str:
+                index = params["index"]
+                cmd = f"curl -sf {auth_flag} -X DELETE 'http://localhost:9200/{index}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_list_indices(cid, dr, auth_flag):
+            async def handler(params: dict) -> str:
+                cmd = f"curl -sf {auth_flag} 'http://localhost:9200/_cat/indices?v'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_cluster_health(cid, dr, auth_flag):
+            async def handler(params: dict) -> str:
+                cmd = f"curl -sf {auth_flag} 'http://localhost:9200/_cluster/health?pretty'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("es_search", "Search documents", SEARCH_SCHEMA, _handler("es_search", url)),
-            AgentTool("es_index", "Index a document", INDEX_DOC_SCHEMA, _handler("es_index", url)),
-            AgentTool("es_delete_index", "Delete an index", INDEX_NAME_SCHEMA, _handler("es_delete_index", url)),
-            AgentTool("es_list_indices", "List all indices", EMPTY_SCHEMA, _handler("es_list_indices", url)),
-            AgentTool("es_cluster_health", "Get cluster health", EMPTY_SCHEMA, _handler("es_cluster_health", url)),
+            AgentTool("es_search", "Search documents", SEARCH_SCHEMA,
+                      _make_search(container_id, docker_runtime, auth)),
+            AgentTool("es_index", "Index a document", INDEX_DOC_SCHEMA,
+                      _make_index_doc(container_id, docker_runtime, auth)),
+            AgentTool("es_delete_index", "Delete an index", INDEX_NAME_SCHEMA,
+                      _make_delete_index(container_id, docker_runtime, auth)),
+            AgentTool("es_list_indices", "List all indices", EMPTY_SCHEMA,
+                      _make_list_indices(container_id, docker_runtime, auth)),
+            AgentTool("es_cluster_health", "Get cluster health", EMPTY_SCHEMA,
+                      _make_cluster_health(container_id, docker_runtime, auth)),
         ]
 
     def generate_credentials(self, config):

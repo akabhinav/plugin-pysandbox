@@ -79,6 +79,8 @@ class PluginDefinition(ABC):
         dns_zone: str,
         credentials: dict[str, str],
         config: dict[str, Any],
+        container_id: str = "",
+        docker_runtime: Any = None,
     ) -> list[AgentTool]:
         """Return tools the agent gains when this plugin installs."""
 

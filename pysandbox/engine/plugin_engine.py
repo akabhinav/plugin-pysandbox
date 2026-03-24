@@ -155,7 +155,10 @@ class PluginEngine:
                 await self._docker.exec_in_container(container_id, cmd)
 
             # Step 10: Register agent tools
-            tools = definition.get_agent_tools(plugin_name, dns_zone, credentials, config)
+            tools = definition.get_agent_tools(
+                plugin_name, dns_zone, credentials, config,
+                container_id=container_id, docker_runtime=self._docker,
+            )
             tool_names = [t.name for t in tools]
             await self._tools.register_tools(sandbox_id, plugin_name, tools)
             rollback_stack.append(("unregister_tools", lambda: self._tools.unregister_tools(sandbox_id, plugin_name)))

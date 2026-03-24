@@ -1,5 +1,6 @@
 """Grafana plugin — visualization and dashboards."""
 
+import json
 import secrets
 from typing import Any
 
@@ -14,10 +15,8 @@ DASHBOARD_SCHEMA = {
 }
 
 
-def _handler(name, url):
-    async def h(params):
-        return f"[{name}] url={url} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("grafana")
@@ -52,11 +51,29 @@ class GrafanaPlugin(PluginDefinition):
             "GRAFANA_PASSWORD": credentials["password"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = f"http://{plugin_name}.{dns_zone}:3000"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        user = credentials["user"]
+        password = credentials["password"]
+
+        def _make_list_dashboards(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                cmd = f"curl -sf -u {u}:{p} 'http://localhost:3000/api/search?type=dash-db'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_create_dashboard(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                dashboard_json = _quote(params["dashboard_json"])
+                cmd = f"curl -sf -u {u}:{p} -H 'Content-Type: application/json' -X POST 'http://localhost:3000/api/dashboards/db' -d '{dashboard_json}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("grafana_list_dashboards", "List dashboards", EMPTY_SCHEMA, _handler("grafana_list_dashboards", url)),
-            AgentTool("grafana_create_dashboard", "Create a dashboard", DASHBOARD_SCHEMA, _handler("grafana_create_dashboard", url)),
+            AgentTool("grafana_list_dashboards", "List dashboards", EMPTY_SCHEMA,
+                      _make_list_dashboards(container_id, docker_runtime, user, password)),
+            AgentTool("grafana_create_dashboard", "Create a dashboard", DASHBOARD_SCHEMA,
+                      _make_create_dashboard(container_id, docker_runtime, user, password)),
         ]
 
     def generate_credentials(self, config):

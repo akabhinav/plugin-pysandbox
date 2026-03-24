@@ -60,36 +60,34 @@ class LocalStackPlugin(PluginDefinition):
             "DYNAMODB_ENDPOINT_URL": endpoint,
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        endpoint = f"http://{plugin_name}.{dns_zone}:4566"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        endpoint_url = "http://localhost:4566"
         region = config.get("region", "us-east-1")
-        cfg = {
-            "endpoint_url": endpoint,
-            "region_name": region,
-            "aws_access_key_id": "localstack",
-            "aws_secret_access_key": "localstack",
-        }
+        access_key = "localstack"
+        secret_key = "localstack"
+        args = (container_id, docker_runtime, endpoint_url, access_key, secret_key, region)
         return [
-            AgentTool("s3_upload", "Upload to S3", S3_UPLOAD_SCHEMA, make_s3_upload(cfg)),
-            AgentTool("s3_download", "Download from S3", S3_DOWNLOAD_SCHEMA, make_s3_download(cfg)),
-            AgentTool("s3_list", "List S3 objects", S3_LIST_SCHEMA, make_s3_list(cfg)),
-            AgentTool("s3_delete", "Delete S3 object", S3_DELETE_SCHEMA, make_s3_delete(cfg)),
-            AgentTool("s3_presign", "Generate presigned URL", S3_PRESIGN_SCHEMA, make_s3_presign(cfg)),
-            AgentTool("sqs_send", "Send SQS message", SQS_SEND_SCHEMA, make_sqs_send(cfg)),
-            AgentTool("sqs_receive", "Receive SQS messages", SQS_RECV_SCHEMA, make_sqs_receive(cfg)),
-            AgentTool("sqs_create_queue", "Create SQS queue", SQS_CREATE_SCHEMA, make_sqs_create(cfg)),
-            AgentTool("sns_publish", "Publish to SNS", SNS_PUB_SCHEMA, make_sns_publish(cfg)),
-            AgentTool("sns_create_topic", "Create SNS topic", SNS_CREATE_SCHEMA, make_sns_create(cfg)),
-            AgentTool("lambda_invoke", "Invoke Lambda", LAMBDA_INVOKE_SCHEMA, make_lambda_invoke(cfg)),
-            AgentTool("dynamodb_put", "PutItem in DynamoDB", DYNAMO_PUT_SCHEMA, make_dynamo_put(cfg)),
-            AgentTool("dynamodb_get", "GetItem from DynamoDB", DYNAMO_GET_SCHEMA, make_dynamo_get(cfg)),
-            AgentTool("dynamodb_query", "Query DynamoDB", DYNAMO_QUERY_SCHEMA, make_dynamo_query(cfg)),
-            AgentTool("secretsmanager_get", "Get a secret", SM_GET_SCHEMA, make_sm_get(cfg)),
-            AgentTool("secretsmanager_put", "Put a secret", SM_PUT_SCHEMA, make_sm_put(cfg)),
+            AgentTool("s3_upload", "Upload to S3", S3_UPLOAD_SCHEMA, make_s3_upload(*args)),
+            AgentTool("s3_download", "Download from S3", S3_DOWNLOAD_SCHEMA, make_s3_download(*args)),
+            AgentTool("s3_list", "List S3 objects", S3_LIST_SCHEMA, make_s3_list(*args)),
+            AgentTool("s3_delete", "Delete S3 object", S3_DELETE_SCHEMA, make_s3_delete(*args)),
+            AgentTool("s3_presign", "Generate presigned URL", S3_PRESIGN_SCHEMA, make_s3_presign(*args)),
+            AgentTool("sqs_send", "Send SQS message", SQS_SEND_SCHEMA, make_sqs_send(*args)),
+            AgentTool("sqs_receive", "Receive SQS messages", SQS_RECV_SCHEMA, make_sqs_receive(*args)),
+            AgentTool("sqs_create_queue", "Create SQS queue", SQS_CREATE_SCHEMA, make_sqs_create(*args)),
+            AgentTool("sns_publish", "Publish to SNS", SNS_PUB_SCHEMA, make_sns_publish(*args)),
+            AgentTool("sns_create_topic", "Create SNS topic", SNS_CREATE_SCHEMA, make_sns_create(*args)),
+            AgentTool("lambda_invoke", "Invoke Lambda", LAMBDA_INVOKE_SCHEMA, make_lambda_invoke(*args)),
+            AgentTool("dynamodb_put", "PutItem in DynamoDB", DYNAMO_PUT_SCHEMA, make_dynamo_put(*args)),
+            AgentTool("dynamodb_get", "GetItem from DynamoDB", DYNAMO_GET_SCHEMA, make_dynamo_get(*args)),
+            AgentTool("dynamodb_query", "Query DynamoDB", DYNAMO_QUERY_SCHEMA, make_dynamo_query(*args)),
+            AgentTool("secretsmanager_get", "Get a secret", SM_GET_SCHEMA, make_sm_get(*args)),
+            AgentTool("secretsmanager_put", "Put a secret", SM_PUT_SCHEMA, make_sm_put(*args)),
         ]
 
     def generate_credentials(self, config):
-        return {}  # LocalStack uses fixed credentials
+        return {}
 
     def get_init_commands(self, plugin_name, credentials, config):
         cmds = []

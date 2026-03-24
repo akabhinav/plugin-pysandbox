@@ -6,15 +6,10 @@ from typing import Any
 from pysandbox.agent.tools.shell_tools import (
     EMPTY_SCHEMA, FILE_LIST_SCHEMA, FILE_READ_SCHEMA, FILE_WRITE_SCHEMA,
     SHELL_EXEC_SCHEMA,
+    make_file_list, make_file_read, make_file_write, make_shell_exec,
 )
 from pysandbox.plugin.base import AgentTool, PluginDefinition
 from pysandbox.plugin.registry import register_plugin
-
-
-def _handler(name, host):
-    async def h(params):
-        return f"[{name}] host={host} params={params}"
-    return h
 
 
 @register_plugin("code-executor")
@@ -46,17 +41,21 @@ class CodeExecutorPlugin(PluginDefinition):
             "WORKSPACE_PATH": "/workspace",
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        host = f"{plugin_name}.{dns_zone}"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
         return [
-            AgentTool("shell_exec", "Execute a shell command", SHELL_EXEC_SCHEMA, _handler("shell_exec", host)),
-            AgentTool("file_read", "Read a file", FILE_READ_SCHEMA, _handler("file_read", host)),
-            AgentTool("file_write", "Write a file", FILE_WRITE_SCHEMA, _handler("file_write", host)),
-            AgentTool("file_list", "List files", FILE_LIST_SCHEMA, _handler("file_list", host)),
+            AgentTool("shell_exec", "Execute a shell command", SHELL_EXEC_SCHEMA,
+                      make_shell_exec(container_id, docker_runtime)),
+            AgentTool("file_read", "Read a file", FILE_READ_SCHEMA,
+                      make_file_read(container_id, docker_runtime)),
+            AgentTool("file_write", "Write a file", FILE_WRITE_SCHEMA,
+                      make_file_write(container_id, docker_runtime)),
+            AgentTool("file_list", "List files", FILE_LIST_SCHEMA,
+                      make_file_list(container_id, docker_runtime)),
         ]
 
     def generate_credentials(self, config):
-        return {}  # No credentials needed
+        return {}
 
     def get_init_commands(self, plugin_name, credentials, config):
         cmds = []

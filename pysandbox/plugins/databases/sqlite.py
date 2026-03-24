@@ -1,12 +1,12 @@
-"""SQLite plugin — lightweight file-based database (no separate container)."""
+"""SQLite plugin — lightweight file-based database."""
 
 import secrets
 from typing import Any
 
 from pysandbox.agent.tools.sql_tools import (
     EMPTY_SCHEMA, SQL_EXECUTE_SCHEMA, SQL_QUERY_SCHEMA, TABLE_NAME_SCHEMA,
-    make_describe_table_handler, make_list_tables_handler,
-    make_sql_execute_handler, make_sql_query_handler,
+    make_sqlite_describe_table_handler, make_sqlite_execute_handler,
+    make_sqlite_list_tables_handler, make_sqlite_query_handler,
 )
 from pysandbox.plugin.base import AgentTool, PluginDefinition
 from pysandbox.plugin.registry import register_plugin
@@ -16,11 +16,9 @@ from pysandbox.plugin.registry import register_plugin
 class SQLitePlugin(PluginDefinition):
 
     def get_docker_config(self, plugin_name, sandbox_id, dns_zone, credentials, config, version):
-        # SQLite uses a lightweight alpine container with sqlite3 installed
-        db_path = config.get("db_path", "/data/sandbox.db")
         return {
             "image": "alpine:latest",
-            "command": ["sh", "-c", f"apk add --no-cache sqlite && tail -f /dev/null"],
+            "command": ["sh", "-c", "apk add --no-cache sqlite && tail -f /dev/null"],
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/data", "mode": "rw"},
             },
@@ -39,18 +37,22 @@ class SQLitePlugin(PluginDefinition):
             "DATABASE_URL": f"sqlite:///{db_path}",
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
         db_path = config.get("db_path", "/data/sandbox.db")
-        url = f"sqlite:///{db_path}"
         return [
-            AgentTool("sql_query", "Run a SQL SELECT", SQL_QUERY_SCHEMA, make_sql_query_handler(url)),
-            AgentTool("sql_execute", "Run SQL write", SQL_EXECUTE_SCHEMA, make_sql_execute_handler(url)),
-            AgentTool("db_list_tables", "List tables", EMPTY_SCHEMA, make_list_tables_handler(url)),
-            AgentTool("db_describe_table", "Describe table", TABLE_NAME_SCHEMA, make_describe_table_handler(url)),
+            AgentTool("sql_query", "Run a SQL SELECT", SQL_QUERY_SCHEMA,
+                      make_sqlite_query_handler(container_id, docker_runtime, db_path)),
+            AgentTool("sql_execute", "Run SQL write", SQL_EXECUTE_SCHEMA,
+                      make_sqlite_execute_handler(container_id, docker_runtime, db_path)),
+            AgentTool("db_list_tables", "List tables", EMPTY_SCHEMA,
+                      make_sqlite_list_tables_handler(container_id, docker_runtime, db_path)),
+            AgentTool("db_describe_table", "Describe table", TABLE_NAME_SCHEMA,
+                      make_sqlite_describe_table_handler(container_id, docker_runtime, db_path)),
         ]
 
     def generate_credentials(self, config):
-        return {}  # SQLite needs no credentials
+        return {}
 
     def get_init_commands(self, plugin_name, credentials, config):
         return []

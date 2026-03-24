@@ -55,22 +55,36 @@ class RedisPlugin(PluginDefinition):
             "CELERY_RESULT_BACKEND": url,
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        conn = {"host": f"{plugin_name}.{dns_zone}", "port": 6379, "password": credentials["password"]}
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        password = credentials["password"]
         return [
-            AgentTool("redis_get", "GET a Redis key", KEY_SCHEMA, make_redis_get(conn)),
-            AgentTool("redis_set", "SET a Redis key with optional TTL", KEY_VALUE_TTL_SCHEMA, make_redis_set(conn)),
-            AgentTool("redis_delete", "DEL one or more Redis keys", KEYS_SCHEMA, make_redis_del(conn)),
-            AgentTool("redis_scan", "SCAN keys matching a pattern", PATTERN_SCHEMA, make_redis_scan(conn)),
-            AgentTool("redis_hget", "HGET from a Redis hash", HASH_KEY_SCHEMA, make_redis_hget(conn)),
-            AgentTool("redis_hset", "HSET in a Redis hash", HASH_FIELD_SCHEMA, make_redis_hset(conn)),
-            AgentTool("redis_lpush", "LPUSH to a Redis list", LIST_PUSH_SCHEMA, make_redis_lpush(conn)),
-            AgentTool("redis_lrange", "LRANGE from a Redis list", LIST_RANGE_SCHEMA, make_redis_lrange(conn)),
-            AgentTool("redis_zadd", "ZADD to a sorted set", ZSET_SCHEMA, make_redis_zadd(conn)),
-            AgentTool("redis_zrange", "ZRANGE from a sorted set", ZRANGE_SCHEMA, make_redis_zrange(conn)),
-            AgentTool("redis_publish", "PUBLISH to a channel", PUBSUB_SCHEMA, make_redis_publish(conn)),
-            AgentTool("redis_flushdb", "FLUSHDB (clear all keys)", EMPTY_SCHEMA, make_redis_flush(conn)),
-            AgentTool("redis_info", "Get Redis server INFO", EMPTY_SCHEMA, make_redis_info(conn)),
+            AgentTool("redis_get", "GET a Redis key", KEY_SCHEMA,
+                      make_redis_get(container_id, docker_runtime, password)),
+            AgentTool("redis_set", "SET a Redis key with optional TTL", KEY_VALUE_TTL_SCHEMA,
+                      make_redis_set(container_id, docker_runtime, password)),
+            AgentTool("redis_delete", "DEL one or more Redis keys", KEYS_SCHEMA,
+                      make_redis_del(container_id, docker_runtime, password)),
+            AgentTool("redis_scan", "SCAN keys matching a pattern", PATTERN_SCHEMA,
+                      make_redis_scan(container_id, docker_runtime, password)),
+            AgentTool("redis_hget", "HGET from a Redis hash", HASH_KEY_SCHEMA,
+                      make_redis_hget(container_id, docker_runtime, password)),
+            AgentTool("redis_hset", "HSET in a Redis hash", HASH_FIELD_SCHEMA,
+                      make_redis_hset(container_id, docker_runtime, password)),
+            AgentTool("redis_lpush", "LPUSH to a Redis list", LIST_PUSH_SCHEMA,
+                      make_redis_lpush(container_id, docker_runtime, password)),
+            AgentTool("redis_lrange", "LRANGE from a Redis list", LIST_RANGE_SCHEMA,
+                      make_redis_lrange(container_id, docker_runtime, password)),
+            AgentTool("redis_zadd", "ZADD to a sorted set", ZSET_SCHEMA,
+                      make_redis_zadd(container_id, docker_runtime, password)),
+            AgentTool("redis_zrange", "ZRANGE from a sorted set", ZRANGE_SCHEMA,
+                      make_redis_zrange(container_id, docker_runtime, password)),
+            AgentTool("redis_publish", "PUBLISH to a channel", PUBSUB_SCHEMA,
+                      make_redis_publish(container_id, docker_runtime, password)),
+            AgentTool("redis_flushdb", "FLUSHDB (clear all keys)", EMPTY_SCHEMA,
+                      make_redis_flush(container_id, docker_runtime, password)),
+            AgentTool("redis_info", "Get Redis server INFO", EMPTY_SCHEMA,
+                      make_redis_info(container_id, docker_runtime, password)),
         ]
 
     def generate_credentials(self, config):

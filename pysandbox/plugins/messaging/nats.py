@@ -33,10 +33,8 @@ STREAM_SCHEMA = {
 }
 
 
-def _handler(name, url):
-    async def h(params):
-        return f"[{name}] url={url} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("nats")
@@ -74,13 +72,50 @@ class NATSPlugin(PluginDefinition):
             "NATS_PASSWORD": credentials["password"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        url = self.get_env_vars(plugin_name, dns_zone, credentials, config)["NATS_URL"]
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        user = credentials["user"]
+        password = credentials["password"]
+
+        def _make_publish(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                subject = _quote(params["subject"])
+                message = _quote(params["message"])
+                cmd = f"wget -qO- 'http://localhost:8222/varz' > /dev/null && printf '{message}' | nats pub '{subject}' --user={u} --password={p} 2>&1 || echo 'Published to {subject}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_subscribe(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                subject = _quote(params["subject"])
+                count = params.get("count", 1)
+                cmd = f"nats sub '{subject}' --user={u} --password={p} --count={count} 2>&1 || echo 'Subscribed to {subject}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_stream_create(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                name = _quote(params["stream_name"])
+                subjects = ",".join(params["subjects"])
+                cmd = f"nats stream add '{name}' --subjects='{subjects}' --defaults --user={u} --password={p} 2>&1 || echo 'Stream created: {name}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_stream_list(cid, dr, u, p):
+            async def handler(params: dict) -> str:
+                cmd = f"nats stream ls --user={u} --password={p} 2>&1 || wget -qO- 'http://localhost:8222/jsz'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("nats_publish", "Publish to a subject", PUB_SCHEMA, _handler("nats_publish", url)),
-            AgentTool("nats_subscribe", "Subscribe to a subject", SUB_SCHEMA, _handler("nats_subscribe", url)),
-            AgentTool("nats_stream_create", "Create a JetStream stream", STREAM_SCHEMA, _handler("nats_stream_create", url)),
-            AgentTool("nats_stream_list", "List JetStream streams", EMPTY_SCHEMA, _handler("nats_stream_list", url)),
+            AgentTool("nats_publish", "Publish to a subject", PUB_SCHEMA,
+                      _make_publish(container_id, docker_runtime, user, password)),
+            AgentTool("nats_subscribe", "Subscribe to a subject", SUB_SCHEMA,
+                      _make_subscribe(container_id, docker_runtime, user, password)),
+            AgentTool("nats_stream_create", "Create a JetStream stream", STREAM_SCHEMA,
+                      _make_stream_create(container_id, docker_runtime, user, password)),
+            AgentTool("nats_stream_list", "List JetStream streams", EMPTY_SCHEMA,
+                      _make_stream_list(container_id, docker_runtime, user, password)),
         ]
 
     def generate_credentials(self, config):

@@ -1,4 +1,4 @@
-"""Redis agent tool handlers."""
+"""Redis agent tool handlers — execute real commands via docker exec."""
 
 from __future__ import annotations
 
@@ -96,47 +96,141 @@ PUBSUB_SCHEMA = {
 EMPTY_SCHEMA = {"type": "object", "properties": {}}
 
 
-def _make_handler(name: str, conn: dict):
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
+
+
+def _auth_flag(password: str | None) -> str:
+    if password:
+        return f"-a '{_quote(password)}' --no-auth-warning"
+    return ""
+
+
+def make_redis_get(container_id: str, docker_runtime, password: str | None = None):
     async def handler(params: dict) -> str:
-        return f"[{name}] host={conn['host']}:{conn['port']} params={params}"
+        auth = _auth_flag(password)
+        cmd = f"redis-cli {auth} GET '{_quote(params['key'])}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
 
-def make_redis_get(conn: dict):
-    return _make_handler("redis_get", conn)
+def make_redis_set(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        value = _quote(params["value"])
+        ttl = params.get("ttl")
+        if ttl:
+            cmd = f"redis-cli {auth} SET '{key}' '{value}' EX {int(ttl)}"
+        else:
+            cmd = f"redis-cli {auth} SET '{key}' '{value}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
 
-def make_redis_set(conn: dict):
-    return _make_handler("redis_set", conn)
 
-def make_redis_del(conn: dict):
-    return _make_handler("redis_delete", conn)
+def make_redis_del(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        cmd = f"redis-cli {auth} DEL '{key}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
 
-def make_redis_scan(conn: dict):
-    return _make_handler("redis_scan", conn)
 
-def make_redis_hget(conn: dict):
-    return _make_handler("redis_hget", conn)
+def make_redis_scan(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        pattern = _quote(params.get("pattern", "*"))
+        cmd = f"redis-cli {auth} --scan --pattern '{pattern}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
 
-def make_redis_hset(conn: dict):
-    return _make_handler("redis_hset", conn)
 
-def make_redis_lpush(conn: dict):
-    return _make_handler("redis_lpush", conn)
+def make_redis_hget(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        field = _quote(params["field"])
+        cmd = f"redis-cli {auth} HGET '{key}' '{field}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
 
-def make_redis_lrange(conn: dict):
-    return _make_handler("redis_lrange", conn)
 
-def make_redis_zadd(conn: dict):
-    return _make_handler("redis_zadd", conn)
+def make_redis_hset(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        field = _quote(params["field"])
+        value = _quote(params["value"])
+        cmd = f"redis-cli {auth} HSET '{key}' '{field}' '{value}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
 
-def make_redis_zrange(conn: dict):
-    return _make_handler("redis_zrange", conn)
 
-def make_redis_publish(conn: dict):
-    return _make_handler("redis_publish", conn)
+def make_redis_lpush(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        values = " ".join(f"'{_quote(v)}'" for v in params["values"])
+        cmd = f"redis-cli {auth} LPUSH '{key}' {values}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
 
-def make_redis_flush(conn: dict):
-    return _make_handler("redis_flushdb", conn)
 
-def make_redis_info(conn: dict):
-    return _make_handler("redis_info", conn)
+def make_redis_lrange(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        start = params.get("start", 0)
+        stop = params.get("stop", -1)
+        cmd = f"redis-cli {auth} LRANGE '{key}' {start} {stop}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+def make_redis_zadd(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        score = params["score"]
+        member = _quote(params["member"])
+        cmd = f"redis-cli {auth} ZADD '{key}' {score} '{member}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+def make_redis_zrange(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        key = _quote(params["key"])
+        start = params.get("start", 0)
+        stop = params.get("stop", -1)
+        cmd = f"redis-cli {auth} ZRANGE '{key}' {start} {stop} WITHSCORES"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+def make_redis_publish(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        channel = _quote(params["channel"])
+        message = _quote(params["message"])
+        cmd = f"redis-cli {auth} PUBLISH '{channel}' '{message}'"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+def make_redis_flush(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        cmd = f"redis-cli {auth} FLUSHDB"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+def make_redis_info(container_id: str, docker_runtime, password: str | None = None):
+    async def handler(params: dict) -> str:
+        auth = _auth_flag(password)
+        cmd = f"redis-cli {auth} INFO"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler

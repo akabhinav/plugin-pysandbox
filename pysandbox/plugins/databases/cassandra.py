@@ -19,10 +19,8 @@ KEYSPACE_SCHEMA = {
 }
 
 
-def _handler(name, host):
-    async def h(params):
-        return f"[{name}] host={host} params={params}"
-    return h
+def _quote(s: str) -> str:
+    return s.replace("'", "'\\''")
 
 
 @register_plugin("cassandra")
@@ -59,13 +57,44 @@ class CassandraPlugin(PluginDefinition):
             "CASSANDRA_KEYSPACE": credentials.get("keyspace", "sandbox"),
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        host = f"{plugin_name}.{dns_zone}"
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        def _make_cql_query(cid, dr):
+            async def handler(params: dict) -> str:
+                query = _quote(params["query"])
+                cmd = f"cqlsh -e '{query}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_cql_execute(cid, dr):
+            async def handler(params: dict) -> str:
+                query = _quote(params["query"])
+                cmd = f"cqlsh -e '{query}'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_keyspaces(cid, dr):
+            async def handler(params: dict) -> str:
+                cmd = "cqlsh -e 'DESCRIBE KEYSPACES;'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
+        def _make_tables(cid, dr):
+            async def handler(params: dict) -> str:
+                ks = _quote(params["keyspace"])
+                cmd = f"cqlsh -e 'USE {ks}; DESCRIBE TABLES;'"
+                return await dr.exec_in_container(cid, cmd)
+            return handler
+
         return [
-            AgentTool("cql_query", "Run a CQL SELECT query", CQL_SCHEMA, _handler("cql_query", host)),
-            AgentTool("cql_execute", "Run a CQL write statement", CQL_SCHEMA, _handler("cql_execute", host)),
-            AgentTool("cassandra_keyspaces", "List keyspaces", EMPTY_SCHEMA, _handler("cassandra_keyspaces", host)),
-            AgentTool("cassandra_tables", "List tables in keyspace", KEYSPACE_SCHEMA, _handler("cassandra_tables", host)),
+            AgentTool("cql_query", "Run a CQL SELECT query", CQL_SCHEMA,
+                      _make_cql_query(container_id, docker_runtime)),
+            AgentTool("cql_execute", "Run a CQL write statement", CQL_SCHEMA,
+                      _make_cql_execute(container_id, docker_runtime)),
+            AgentTool("cassandra_keyspaces", "List keyspaces", EMPTY_SCHEMA,
+                      _make_keyspaces(container_id, docker_runtime)),
+            AgentTool("cassandra_tables", "List tables in keyspace", KEYSPACE_SCHEMA,
+                      _make_tables(container_id, docker_runtime)),
         ]
 
     def generate_credentials(self, config):

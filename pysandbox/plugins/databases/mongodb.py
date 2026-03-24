@@ -51,18 +51,28 @@ class MongoDBPlugin(PluginDefinition):
             "MONGODB_PASSWORD": credentials["password"],
         }
 
-    def get_agent_tools(self, plugin_name, dns_zone, credentials, config):
-        uri = self.get_env_vars(plugin_name, dns_zone, credentials, config)["MONGODB_URI"]
-        db = credentials["database"]
+    def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
+                        container_id="", docker_runtime=None):
+        user = credentials["user"]
+        password = credentials["password"]
+        database = credentials["database"]
         return [
-            AgentTool("mongo_find", "Find documents", MONGO_FIND_SCHEMA, make_mongo_find(uri, db)),
-            AgentTool("mongo_insert_one", "Insert a document", MONGO_INSERT_SCHEMA, make_mongo_insert_one(uri, db)),
-            AgentTool("mongo_insert_many", "Insert multiple documents", MONGO_INSERT_MANY_SCHEMA, make_mongo_insert_many(uri, db)),
-            AgentTool("mongo_update", "Update documents", MONGO_UPDATE_SCHEMA, make_mongo_update(uri, db)),
-            AgentTool("mongo_delete", "Delete documents", MONGO_DELETE_SCHEMA, make_mongo_delete(uri, db)),
-            AgentTool("mongo_aggregate", "Run aggregation pipeline", MONGO_AGG_SCHEMA, make_mongo_aggregate(uri, db)),
-            AgentTool("mongo_list_collections", "List collections", EMPTY_SCHEMA, make_mongo_list_collections(uri, db)),
-            AgentTool("mongo_create_index", "Create an index", MONGO_IDX_SCHEMA, make_mongo_create_index(uri, db)),
+            AgentTool("mongo_find", "Find documents", MONGO_FIND_SCHEMA,
+                      make_mongo_find(container_id, docker_runtime, user, password, database)),
+            AgentTool("mongo_insert_one", "Insert a document", MONGO_INSERT_SCHEMA,
+                      make_mongo_insert_one(container_id, docker_runtime, user, password, database)),
+            AgentTool("mongo_insert_many", "Insert multiple documents", MONGO_INSERT_MANY_SCHEMA,
+                      make_mongo_insert_many(container_id, docker_runtime, user, password, database)),
+            AgentTool("mongo_update", "Update documents", MONGO_UPDATE_SCHEMA,
+                      make_mongo_update(container_id, docker_runtime, user, password, database)),
+            AgentTool("mongo_delete", "Delete documents", MONGO_DELETE_SCHEMA,
+                      make_mongo_delete(container_id, docker_runtime, user, password, database)),
+            AgentTool("mongo_aggregate", "Run aggregation pipeline", MONGO_AGG_SCHEMA,
+                      make_mongo_aggregate(container_id, docker_runtime, user, password, database)),
+            AgentTool("mongo_list_collections", "List collections", EMPTY_SCHEMA,
+                      make_mongo_list_collections(container_id, docker_runtime, user, password, database)),
+            AgentTool("mongo_create_index", "Create an index", MONGO_IDX_SCHEMA,
+                      make_mongo_create_index(container_id, docker_runtime, user, password, database)),
         ]
 
     def generate_credentials(self, config):
