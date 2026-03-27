@@ -23,8 +23,8 @@ health_check:
   port: 7474
   path: "/"
   interval_seconds: 5
-  timeout_seconds: 3
-  retries: 10
+  timeout_seconds: 10
+  retries: 30
 config_params: []
 depends_on: []
 startup_order: 50

@@ -32,11 +32,11 @@ class Neo4jPlugin(PluginDefinition):
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/data", "mode": "rw"},
             },
             "healthcheck": {
-                "test": ["CMD-SHELL", "cypher-shell -u neo4j -p $NEO4J_AUTH 'RETURN 1' || exit 1"],
+                "test": ["CMD-SHELL", f"cypher-shell -u {credentials['user']} -p '{credentials['password']}' 'RETURN 1' || exit 1"],
                 "interval": 10_000_000_000,
                 "timeout": 5_000_000_000,
-                "retries": 12,
-                "start_period": 30_000_000_000,
+                "retries": 30,
+                "start_period": 60_000_000_000,
             },
         }
 

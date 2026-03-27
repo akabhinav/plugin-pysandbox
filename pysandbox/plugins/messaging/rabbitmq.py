@@ -40,8 +40,12 @@ def _quote(s: str) -> str:
 class RabbitMQPlugin(PluginDefinition):
 
     def get_docker_config(self, plugin_name, sandbox_id, dns_zone, credentials, config, version):
+        if version == "latest":
+            image = "rabbitmq:management-alpine"
+        else:
+            image = f"rabbitmq:{version}-management-alpine"
         return {
-            "image": f"rabbitmq:{version}-management-alpine",
+            "image": image,
             "environment": {
                 "RABBITMQ_DEFAULT_USER": credentials["user"],
                 "RABBITMQ_DEFAULT_PASS": credentials["password"],

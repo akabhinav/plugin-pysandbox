@@ -13,14 +13,14 @@ ports:
     name: primary
 resources:
   cpu: "1.0"
-  memory: "1024m"
+  memory: "2048m"
   disk_gb: 5.0
 health_check:
   type: tcp
   port: 9042
   interval_seconds: 10
-  timeout_seconds: 10
-  retries: 24
+  timeout_seconds: 15
+  retries: 40
 config_params: []
 depends_on: []
 startup_order: 50

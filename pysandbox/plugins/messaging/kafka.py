@@ -31,11 +31,8 @@ class KafkaPlugin(PluginDefinition):
                 "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
                 "KAFKA_INTER_BROKER_LISTENER_NAME": "PLAINTEXT",
                 "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
-                "KAFKA_LOG_DIRS": "/var/kafka/data",
+                "KAFKA_LOG_DIRS": "/tmp/kafka-logs",
                 "CLUSTER_ID": secrets.token_urlsafe(16),
-            },
-            "volumes": {
-                f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/var/kafka/data", "mode": "rw"},
             },
             "healthcheck": {
                 "test": ["CMD-SHELL", f"kafka-topics --bootstrap-server {host}:9092 --list || exit 1"],

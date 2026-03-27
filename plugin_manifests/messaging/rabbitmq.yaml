@@ -4,7 +4,7 @@ display_name: "RabbitMQ"
 description: "RabbitMQ message broker with management UI"
 category: messaging
 tags: [messaging, amqp, broker, rabbitmq]
-docker_image: "rabbitmq:{version}-management-alpine"
+docker_image: "rabbitmq:management-alpine"
 supported_versions: ["latest", "3.13", "3.12", "3.11"]
 default_version: "latest"
 ports:
