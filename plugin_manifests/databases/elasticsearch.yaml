@@ -20,8 +20,8 @@ health_check:
   port: 9200
   path: "/_cluster/health"
   interval_seconds: 10
-  timeout_seconds: 5
-  retries: 15
+  timeout_seconds: 10
+  retries: 24
 config_params: []
 depends_on: []
 startup_order: 50

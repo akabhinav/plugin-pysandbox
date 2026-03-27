@@ -30,14 +30,17 @@ class CreateSandboxRequest(BaseModel):
 async def create_sandbox(req: CreateSandboxRequest, request: Request):
     """Create a new sandbox with optional initial plugins."""
     engine = request.app.state.sandbox_engine
-    sandbox = await engine.create(
-        name=req.name,
-        owner_id=req.owner_id,
-        org_id=req.org_id,
-        plugins=[p.model_dump() for p in req.plugins],
-        tags=req.tags,
-    )
-    return {"sandbox": _sanitize(sandbox)}
+    try:
+        sandbox = await engine.create(
+            name=req.name,
+            owner_id=req.owner_id,
+            org_id=req.org_id,
+            plugins=[p.model_dump() for p in req.plugins],
+            tags=req.tags,
+        )
+        return {"sandbox": _sanitize(sandbox)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("")
