@@ -10,7 +10,7 @@ import typer
 
 app = typer.Typer(name="pysandbox", help="Plugin-based enterprise sandbox runtime")
 
-BASE_URL = "http://localhost:8080"
+BASE_URL = "http://localhost:18080"
 
 
 def _api(method: str, path: str, **kwargs) -> dict:
