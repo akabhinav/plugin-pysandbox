@@ -1,0 +1,30 @@
+id: nessie
+version: "1.0.0"
+display_name: "Nessie"
+description: "Project Nessie — Git-like catalog for Apache Iceberg data lakehouses"
+category: cloud
+tags: [catalog, iceberg, nessie, lakehouse, versioning]
+docker_image: "ghcr.io/projectnessie/nessie:{version}"
+supported_versions: ["latest", "0.99.0", "0.95.0", "0.80.0"]
+default_version: "latest"
+ports:
+  - port: 19120
+    protocol: tcp
+    name: api
+resources:
+  cpu: "0.5"
+  memory: "512m"
+  disk_gb: 1.0
+health_check:
+  type: http
+  port: 19120
+  path: "/api/v2/config"
+  interval_seconds: 5
+  timeout_seconds: 5
+  retries: 20
+config_params: []
+depends_on: []
+startup_order: 40
+generates_credentials: false
+persistent_data: true
+supports_hot_reload: false

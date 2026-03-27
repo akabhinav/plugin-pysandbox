@@ -1,0 +1,36 @@
+id: spark
+version: "1.0.0"
+display_name: "Apache Spark"
+description: "Apache Spark cluster with Iceberg, Nessie catalog, and S3 support for data lakehouse"
+category: runtime
+tags: [runtime, spark, iceberg, lakehouse, processing, analytics]
+docker_image: "apache/spark:{version}"
+supported_versions: ["latest", "3.5.4", "3.5.3", "3.4.4"]
+default_version: "3.5.4"
+ports:
+  - port: 8080
+    protocol: tcp
+    name: master-ui
+  - port: 7077
+    protocol: tcp
+    name: master
+  - port: 4040
+    protocol: tcp
+    name: spark-ui
+resources:
+  cpu: "2.0"
+  memory: "4096m"
+  disk_gb: 10.0
+health_check:
+  type: http
+  port: 8080
+  path: "/"
+  interval_seconds: 10
+  timeout_seconds: 10
+  retries: 30
+config_params: []
+depends_on: []
+startup_order: 70
+generates_credentials: false
+persistent_data: false
+supports_hot_reload: false
