@@ -335,7 +335,7 @@ def page_create_sandbox():
             if not name:
                 st.error("Sandbox name is required")
             else:
-                plugins = [{"plugin_id": pid, "name": pid} for pid in selected_plugins]
+                plugins = [{"plugin_id": pid, "name": pid, "expose": True} for pid in selected_plugins]
                 result = api("POST", "/v1/sandboxes", json={
                     "name": name,
                     "owner_id": owner,
@@ -435,6 +435,41 @@ def page_sandbox_detail():
     if status == "error" and sb.get("error"):
         st.error(f"**Sandbox failed:** {sb['error']}")
 
+    # Quick Access URLs for web-accessible plugins
+    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "elasticsearch",
+                   "localstack", "minio", "vault", "rabbitmq", "clickhouse"}
+    web_links = []
+    for p in plugins:
+        hp = p.get("host_port")
+        pid = p.get("plugin_id", "")
+        if hp and pid in WEB_PLUGINS:
+            url = f"http://localhost:{hp}"
+            # Add token for Jupyter
+            env_data = api("GET", f"/v1/sandboxes/{sandbox_id}/env")
+            token = ""
+            if env_data and env_data.get("env"):
+                token = env_data["env"].get("JUPYTER_TOKEN", "")
+            if pid == "jupyter" and token:
+                display_url = f"{url}?token={token}"
+            else:
+                display_url = url
+            web_links.append((p.get("plugin_name", pid), display_url, pid))
+
+    if web_links:
+        st.markdown('<div class="section-header">Quick Access</div>', unsafe_allow_html=True)
+        link_cols = st.columns(len(web_links))
+        for i, (name, url, pid) in enumerate(web_links):
+            with link_cols[i]:
+                st.markdown(f"""
+                <a href="{url}" target="_blank" style="
+                    display:block; text-align:center; padding:12px 16px;
+                    background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color:white; border-radius:10px; text-decoration:none;
+                    font-weight:700; font-size:0.9rem;
+                    box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+                ">🔗 Open {name}</a>
+                """, unsafe_allow_html=True)
+
     # Tabs
     tab_plugins, tab_run, tab_env, tab_dns, tab_tools = st.tabs([
         f"🔌 Plugins ({len(plugins)})", "▶️ Run Tool", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools"
@@ -455,7 +490,7 @@ def page_sandbox_detail():
                             sel = st.selectbox("Plugin", available)
                             pname = st.text_input("Instance name", value=sel, help="Unique name within this sandbox")
                             pver = st.text_input("Version", placeholder="latest", help="Leave blank for default")
-                            expose = st.checkbox("Expose on host port", help="Make accessible from outside the sandbox network")
+                            expose = st.checkbox("Expose on host port", value=True, help="Make accessible from outside the sandbox network")
 
                             if st.form_submit_button("Install Plugin", type="primary", use_container_width=True):
                                 body = {"plugin_id": sel, "name": pname, "expose": expose}
@@ -482,6 +517,17 @@ def page_sandbox_detail():
                 cols = st.columns([3, 1, 1, 1])
                 with cols[0]:
                     icon = CATEGORY_ICONS.get(p.get("category", ""), "📦")
+                    host_port = p.get("host_port")
+                    port_html = ""
+                    if host_port:
+                        # Determine protocol for clickable URL
+                        pid = p.get("plugin_id", "")
+                        if pid in ("jupyter", "grafana", "prometheus", "jaeger", "elasticsearch",
+                                   "localstack", "minio", "vault", "rabbitmq", "clickhouse"):
+                            url = f"http://localhost:{host_port}"
+                            port_html = f'&nbsp;|&nbsp; Access: <a href="{url}" target="_blank"><strong>{url}</strong></a>'
+                        else:
+                            port_html = f'&nbsp;|&nbsp; Host Port: <strong>{host_port}</strong>'
                     st.markdown(f"""
                     <div class="tool-card">
                         <span class="tool-name">{icon} {p.get('plugin_name', p.get('name', '?'))}</span>
@@ -489,7 +535,7 @@ def page_sandbox_detail():
                         <div class="tool-desc">
                             Plugin: <strong>{p.get('plugin_id', '?')}</strong>
                             &nbsp;|&nbsp; Container: <code>{p.get('container_id', '—')[:12]}</code>
-                            {f"&nbsp;|&nbsp; Port: <strong>{p.get('host_port')}</strong>" if p.get('host_port') else ""}
+                            {port_html}
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -802,7 +848,7 @@ def page_catalog():
                             result = api("POST", "/v1/sandboxes", json={
                                 "name": f"{p['id']}-sandbox",
                                 "owner_id": "default",
-                                "plugins": [{"plugin_id": p["id"], "name": p["id"]}],
+                                "plugins": [{"plugin_id": p["id"], "name": p["id"], "expose": True}],
                             })
                             if result:
                                 st.toast(f"Created sandbox with {p['id']}!", icon="🚀")
