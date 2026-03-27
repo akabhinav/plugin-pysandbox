@@ -930,6 +930,116 @@ def page_plugin_detail():
             st.markdown(f"- **{port.get('name', '?')}**: `{port.get('port', '?')}/{port.get('protocol', 'tcp')}`")
 
 
+def page_containers():
+    """Manage all pysandbox Docker containers."""
+    st.markdown("## Docker Containers")
+    st.markdown("View and manage all PySandbox-managed Docker containers running on your machine.")
+
+    data = api("GET", "/v1/containers")
+    if not data:
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-icon">🐳</div>
+            <div class="empty-text">Cannot fetch containers. Is the API running?</div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+
+    containers = data.get("containers", [])
+
+    if not containers:
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-icon">🐳</div>
+            <div class="empty-text">No PySandbox containers running</div>
+        </div>
+        """, unsafe_allow_html=True)
+        return
+
+    # Metrics
+    total = len(containers)
+    running = sum(1 for c in containers if c["status"] == "running")
+    exited = sum(1 for c in containers if c["status"] == "exited")
+
+    cols = st.columns(3)
+    with cols[0]:
+        st.markdown(metric_card(total, "Total Containers", "blue"), unsafe_allow_html=True)
+    with cols[1]:
+        st.markdown(metric_card(running, "Running", "green"), unsafe_allow_html=True)
+    with cols[2]:
+        st.markdown(metric_card(exited, "Stopped / Exited", "orange"), unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Select all / none
+    col_sel, col_actions = st.columns([2, 1])
+    with col_sel:
+        select_all = st.checkbox("Select all", key="select_all_containers")
+
+    # Container list with checkboxes
+    selected_ids = []
+    for c in containers:
+        cid = c["id"]
+        short_id = c.get("short_id", cid[:12])
+        status = c["status"]
+        status_icon = "🟢" if status == "running" else "🔴" if status == "exited" else "🟡"
+        port_info = f" | Port: **{c['host_port']}**" if c.get("host_port") else ""
+
+        col_check, col_info = st.columns([0.5, 5])
+        with col_check:
+            checked = st.checkbox("", key=f"ct_{cid}", value=select_all, label_visibility="collapsed")
+            if checked:
+                selected_ids.append(cid)
+        with col_info:
+            st.markdown(f"""
+            <div class="tool-card">
+                <span class="tool-name">{status_icon} {c['name']}</span>
+                <div class="tool-desc">
+                    Image: <code>{c['image']}</code>
+                    &nbsp;|&nbsp; Status: <strong>{status}</strong>
+                    &nbsp;|&nbsp; ID: <code>{short_id}</code>
+                    {port_info}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Action buttons
+    col_destroy, col_refresh, col_spacer = st.columns([1, 1, 3])
+    with col_destroy:
+        if selected_ids:
+            if st.button(
+                f"🗑️ Remove {len(selected_ids)} container{'s' if len(selected_ids) > 1 else ''}",
+                type="primary", use_container_width=True,
+            ):
+                st.session_state["confirm_remove_containers"] = selected_ids
+        else:
+            st.button("🗑️ Select containers to remove", disabled=True, use_container_width=True)
+    with col_refresh:
+        if st.button("🔄 Refresh", use_container_width=True):
+            st.rerun()
+
+    # Confirmation
+    if st.session_state.get("confirm_remove_containers"):
+        ids_to_remove = st.session_state["confirm_remove_containers"]
+        st.warning(f"Are you sure you want to **force remove {len(ids_to_remove)} container(s)**? This cannot be undone.")
+        cc1, cc2, cc3 = st.columns([2, 1, 1])
+        with cc2:
+            if st.button("Cancel", use_container_width=True):
+                del st.session_state["confirm_remove_containers"]
+                st.rerun()
+        with cc3:
+            if st.button("Yes, Remove", type="primary", use_container_width=True):
+                result = api("POST", "/v1/containers/remove", json={"container_ids": ids_to_remove})
+                if result:
+                    count = result.get("count", 0)
+                    st.toast(f"Removed {count} container(s)", icon="🗑️")
+                del st.session_state["confirm_remove_containers"]
+                time.sleep(0.5)
+                st.rerun()
+
+
 # ── Main App ────────────────────────────────────────────────────────────────
 
 def main():
@@ -959,6 +1069,7 @@ def main():
             "dashboard": ("📊", "Dashboard"),
             "catalog": ("📦", "Plugin Catalog"),
             "create_sandbox": ("➕", "New Sandbox"),
+            "containers": ("🐳", "Containers"),
         }
 
         for key, (icon, label) in nav_items.items():
@@ -998,6 +1109,8 @@ def main():
         page_catalog()
     elif page == "plugin_detail":
         page_plugin_detail()
+    elif page == "containers":
+        page_containers()
     else:
         page_dashboard()
 

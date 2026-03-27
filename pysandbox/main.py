@@ -9,7 +9,7 @@ from fastapi import FastAPI
 
 from pysandbox.agent.agent_runtime import AgentRuntime
 from pysandbox.agent.tool_registry import AgentToolRegistry
-from pysandbox.api.v1 import agent, catalog, health, plugins, sandboxes
+from pysandbox.api.v1 import agent, catalog, containers, health, plugins, sandboxes
 from pysandbox.config.settings import get_settings
 from pysandbox.db.repos.plugin_instance_repo import PluginInstanceRepo
 from pysandbox.db.repos.sandbox_repo import SandboxRepo
@@ -124,6 +124,7 @@ def create_app() -> FastAPI:
     app.include_router(sandboxes.router)
     app.include_router(plugins.router)
     app.include_router(agent.router)
+    app.include_router(containers.router)
 
     return app
 

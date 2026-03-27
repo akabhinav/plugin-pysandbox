@@ -207,6 +207,50 @@ class DockerRuntime:
 
         return await asyncio.to_thread(_logs)
 
+    async def list_managed_containers(self) -> list[dict]:
+        """List all pysandbox-managed containers."""
+        def _list():
+            client = self._get_client()
+            containers = client.containers.list(
+                all=True, filters={"label": "pysandbox.managed=true"},
+            )
+            result = []
+            for c in containers:
+                ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
+                host_port = None
+                for port_info in ports.values():
+                    if port_info:
+                        host_port = port_info[0].get("HostPort")
+                        break
+                result.append({
+                    "id": c.id,
+                    "short_id": c.short_id,
+                    "name": c.name,
+                    "image": c.image.tags[0] if c.image.tags else str(c.image.id)[:20],
+                    "status": c.status,
+                    "host_port": host_port,
+                    "created": c.attrs.get("Created", ""),
+                })
+            return result
+
+        return await asyncio.to_thread(_list)
+
+    async def force_remove_containers(self, container_ids: list[str]) -> list[str]:
+        """Force remove containers by ID. Returns list of removed IDs."""
+        def _remove():
+            client = self._get_client()
+            removed = []
+            for cid in container_ids:
+                try:
+                    container = client.containers.get(cid)
+                    container.remove(force=True)
+                    removed.append(cid)
+                except Exception as e:
+                    logger.warning("force_remove_failed", id=cid[:12], error=str(e))
+            return removed
+
+        return await asyncio.to_thread(_remove)
+
     async def close(self) -> None:
         if self._client:
             self._client.close()
