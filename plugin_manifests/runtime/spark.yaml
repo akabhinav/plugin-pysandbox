@@ -1,9 +1,9 @@
 id: spark
 version: "1.0.0"
-display_name: "Apache Spark"
-description: "Apache Spark cluster with Iceberg, Nessie catalog, and S3 support for data lakehouse"
+display_name: "Apache Spark Cluster"
+description: "Apache Spark standalone cluster (master + workers) with Iceberg, Nessie, and S3 support"
 category: runtime
-tags: [runtime, spark, iceberg, lakehouse, processing, analytics]
+tags: [runtime, spark, iceberg, lakehouse, processing, analytics, cluster]
 docker_image: "apache/spark:{version}"
 supported_versions: ["latest", "3.5.4", "3.5.3", "3.4.4"]
 default_version: "3.5.4"
@@ -17,6 +17,9 @@ ports:
   - port: 4040
     protocol: tcp
     name: spark-ui
+  - port: 8081
+    protocol: tcp
+    name: worker-ui
 resources:
   cpu: "2.0"
   memory: "4096m"
@@ -28,7 +31,22 @@ health_check:
   interval_seconds: 10
   timeout_seconds: 10
   retries: 30
-config_params: []
+config_params:
+  - key: workers
+    type: int
+    default: 2
+    required: false
+    description: "Number of Spark workers"
+  - key: worker_cores
+    type: int
+    default: 2
+    required: false
+    description: "CPU cores per worker"
+  - key: worker_memory
+    type: string
+    default: "1g"
+    required: false
+    description: "Memory per worker (e.g. 1g, 2g)"
 depends_on: []
 startup_order: 70
 generates_credentials: false

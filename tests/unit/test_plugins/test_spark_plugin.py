@@ -26,16 +26,44 @@ class TestSparkPlugin:
         assert env["SPARK_HOST"] == "spark.abc.sandbox.local"
         assert env["SPARK_MASTER_PORT"] == "7077"
         assert env["SPARK_UI_PORT"] == "8080"
-        assert "SPARK_MASTER_URL" in env
         assert "spark://" in env["SPARK_MASTER_URL"]
+        assert env["SPARK_DEPLOY_MODE"] == "cluster"
 
-    def test_get_docker_config(self):
+    def test_get_docker_config_cluster_mode(self):
+        """Spark runs master + workers via entrypoint script."""
         plugin = get_plugin("spark")
         cfg = plugin.get_docker_config("spark", "sb123", "abc.sandbox.local", {}, {}, "3.5.4")
 
         assert cfg["image"] == "apache/spark:3.5.4"
         assert "healthcheck" in cfg
-        assert "org.apache.spark.deploy.master.Master" in cfg["command"]
+        # Command should be bash script that starts master + workers
+        assert cfg["command"][0] == "bash"
+        assert cfg["command"][1] == "-c"
+        assert "start-master.sh" in cfg["command"][2]
+        assert "start-worker.sh" in cfg["command"][2]
+
+    def test_get_docker_config_default_workers(self):
+        """Default is 2 workers with 2 cores each."""
+        plugin = get_plugin("spark")
+        cfg = plugin.get_docker_config("spark", "sb123", "abc.sandbox.local", {}, {}, "3.5.4")
+
+        env = cfg["environment"]
+        assert env["SPARK_WORKERS"] == "2"
+        assert env["SPARK_WORKER_CORES"] == "2"
+        assert env["SPARK_WORKER_MEMORY"] == "1g"
+
+    def test_get_docker_config_custom_workers(self):
+        """Custom worker count and resources."""
+        plugin = get_plugin("spark")
+        config = {"workers": 4, "worker_cores": 4, "worker_memory": "2g"}
+        cfg = plugin.get_docker_config("spark", "sb123", "abc.sandbox.local", {}, config, "3.5.4")
+
+        env = cfg["environment"]
+        assert env["SPARK_WORKERS"] == "4"
+        assert env["SPARK_WORKER_CORES"] == "4"
+        assert env["SPARK_WORKER_MEMORY"] == "2g"
+        # Entrypoint should launch 4 workers
+        assert "seq 1 4" in cfg["command"][2]
 
     def test_get_docker_config_with_lakehouse(self):
         """Spark config includes Nessie and MinIO when configured."""
@@ -71,3 +99,12 @@ class TestSparkPlugin:
         plugin = get_plugin("spark")
         cmds = plugin.get_init_commands("spark", {}, {})
         assert cmds == []
+
+    def test_healthcheck_checks_both_master_and_worker(self):
+        """Healthcheck verifies both master (8080) and worker (8081) are up."""
+        plugin = get_plugin("spark")
+        cfg = plugin.get_docker_config("spark", "sb123", "abc.sandbox.local", {}, {}, "3.5.4")
+
+        hc_test = cfg["healthcheck"]["test"][1]
+        assert "8080" in hc_test  # master
+        assert "8081" in hc_test  # worker

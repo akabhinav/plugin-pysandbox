@@ -1,4 +1,4 @@
-"""Spark agent tool handlers — submit jobs, run SQL, and manage via spark-submit/spark-sql."""
+"""Spark agent tool handlers — submit jobs to Spark standalone cluster via spark-submit/spark-sql."""
 
 from __future__ import annotations
 
@@ -23,12 +23,14 @@ SPARK_SUBMIT_SCHEMA = {
 PYSPARK_SCHEMA = {
     "type": "object",
     "properties": {
-        "code": {"type": "string", "description": "Python code to execute in PySpark"},
+        "code": {"type": "string", "description": "Python code to execute in PySpark on cluster"},
     },
     "required": ["code"],
 }
 
 EMPTY_SCHEMA = {"type": "object", "properties": {}}
+
+SPARK_MASTER = "spark://localhost:7077"
 
 
 def _quote(s: str) -> str:
@@ -69,13 +71,13 @@ def _iceberg_packages() -> str:
 def make_spark_sql_handler(container_id: str, docker_runtime,
                            nessie_uri: str, s3_endpoint: str,
                            s3_access_key: str, s3_secret_key: str, warehouse: str):
-    """Execute Spark SQL with Iceberg/Nessie catalog pre-configured."""
+    """Execute Spark SQL on the cluster with Iceberg/Nessie pre-configured."""
     async def handler(params: dict) -> str:
         sql = _quote(params["sql"])
         conf = _iceberg_conf(nessie_uri, s3_endpoint, s3_access_key, s3_secret_key, warehouse)
         pkgs = _iceberg_packages()
         cmd = (
-            f"/opt/spark/bin/spark-sql --master local[*] "
+            f"/opt/spark/bin/spark-sql --master {SPARK_MASTER} "
             f"--packages {pkgs} "
             f"{conf} "
             f"-e \"{sql}\""
@@ -87,7 +89,7 @@ def make_spark_sql_handler(container_id: str, docker_runtime,
 def make_spark_submit_handler(container_id: str, docker_runtime,
                               nessie_uri: str, s3_endpoint: str,
                               s3_access_key: str, s3_secret_key: str, warehouse: str):
-    """Submit a Spark job."""
+    """Submit a Spark job to the cluster."""
     async def handler(params: dict) -> str:
         app = _quote(params["app"])
         args = params.get("args", "")
@@ -97,7 +99,8 @@ def make_spark_submit_handler(container_id: str, docker_runtime,
         if extra_packages:
             pkgs = f"{pkgs},{extra_packages}"
         cmd = (
-            f"/opt/spark/bin/spark-submit --master local[*] "
+            f"/opt/spark/bin/spark-submit --master {SPARK_MASTER} "
+            f"--deploy-mode client "
             f"--packages {pkgs} "
             f"{conf} "
             f"{app} {args}"
@@ -109,13 +112,14 @@ def make_spark_submit_handler(container_id: str, docker_runtime,
 def make_pyspark_handler(container_id: str, docker_runtime,
                          nessie_uri: str, s3_endpoint: str,
                          s3_access_key: str, s3_secret_key: str, warehouse: str):
-    """Run PySpark code inline."""
+    """Run PySpark code on the cluster."""
     async def handler(params: dict) -> str:
         code = _quote(params["code"])
         conf = _iceberg_conf(nessie_uri, s3_endpoint, s3_access_key, s3_secret_key, warehouse)
         pkgs = _iceberg_packages()
         cmd = (
-            f"/opt/spark/bin/spark-submit --master local[*] "
+            f"/opt/spark/bin/spark-submit --master {SPARK_MASTER} "
+            f"--deploy-mode client "
             f"--packages {pkgs} "
             f"{conf} "
             f"/dev/stdin <<'PYEOF'\n{code}\nPYEOF"
@@ -125,9 +129,20 @@ def make_pyspark_handler(container_id: str, docker_runtime,
 
 
 def make_spark_list_apps_handler(container_id: str, docker_runtime):
-    """List running Spark applications."""
+    """List running Spark applications and registered workers."""
     async def handler(params: dict) -> str:
-        cmd = "curl -sf http://localhost:8080/json/ 2>/dev/null || echo '{\"status\":\"master not running in standalone mode\"}'"
+        cmd = (
+            "echo '=== Spark Master ===' && "
+            "curl -sf http://localhost:8080/json/ 2>/dev/null | python3 -c \""
+            "import sys,json; d=json.load(sys.stdin); "
+            "print(f'Status: {d.get(\\\"status\\\",\\\"?\\\")}'); "
+            "print(f'Workers: {len(d.get(\\\"workers\\\",[]))}'); "
+            "print(f'Cores: {d.get(\\\"cores\\\",0)}'); "
+            "print(f'Memory: {d.get(\\\"memory\\\",0)} MB'); "
+            "print(f'Running Apps: {len(d.get(\\\"activeapps\\\",[]))}'); "
+            "[print(f'  - {a[\\\"name\\\"]} ({a[\\\"id\\\"]})') for a in d.get('activeapps',[])]"
+            "\" 2>/dev/null || echo 'Master API unavailable'"
+        )
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
@@ -140,7 +155,7 @@ def make_spark_show_tables_handler(container_id: str, docker_runtime,
         conf = _iceberg_conf(nessie_uri, s3_endpoint, s3_access_key, s3_secret_key, warehouse)
         pkgs = _iceberg_packages()
         cmd = (
-            f"/opt/spark/bin/spark-sql --master local[*] "
+            f"/opt/spark/bin/spark-sql --master {SPARK_MASTER} "
             f"--packages {pkgs} "
             f"{conf} "
             f"-e \"SHOW NAMESPACES IN nessie; SHOW TABLES IN nessie;\""
