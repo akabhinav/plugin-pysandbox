@@ -22,21 +22,25 @@ def _quote(s: str) -> str:
 class Neo4jPlugin(PluginDefinition):
 
     def get_docker_config(self, plugin_name, sandbox_id, dns_zone, credentials, config, version):
+        env = {
+            "NEO4J_AUTH": f"{credentials['user']}/{credentials['password']}",
+            "NEO4J_ACCEPT_LICENSE_AGREEMENT": "yes",
+        }
+        # Only install APOC if explicitly requested
+        if config.get("apoc", False):
+            env["NEO4J_PLUGINS"] = '["apoc"]'
         return {
             "image": f"neo4j:{version}",
-            "environment": {
-                "NEO4J_AUTH": f"{credentials['user']}/{credentials['password']}",
-                "NEO4J_PLUGINS": '["apoc"]',
-            },
+            "environment": env,
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/data", "mode": "rw"},
             },
             "healthcheck": {
-                "test": ["CMD-SHELL", f"cypher-shell -u {credentials['user']} -p '{credentials['password']}' 'RETURN 1' || exit 1"],
+                "test": ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"],
                 "interval": 10_000_000_000,
                 "timeout": 5_000_000_000,
                 "retries": 30,
-                "start_period": 60_000_000_000,
+                "start_period": 30_000_000_000,
             },
         }
 

@@ -4,8 +4,8 @@ display_name: "Apache Kafka"
 description: "Apache Kafka distributed event streaming platform"
 category: messaging
 tags: [messaging, streaming, event, kafka]
-docker_image: "confluentinc/cp-kafka:{version}"
-supported_versions: ["latest", "7.6.0", "7.5.0", "7.4.0"]
+docker_image: "apache/kafka:{version}"
+supported_versions: ["latest", "3.9.0", "3.8.1", "3.7.0"]
 default_version: "latest"
 ports:
   - port: 9092
