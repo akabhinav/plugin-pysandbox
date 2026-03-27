@@ -27,6 +27,7 @@ def mock_docker():
     docker = MagicMock()
     docker.create_and_start = AsyncMock(return_value="container-123")
     docker.is_healthy = AsyncMock(return_value=True)
+    docker.get_container_status = AsyncMock(return_value="healthy")
     docker.get_container_ip = AsyncMock(return_value="172.20.0.3")
     docker.exec_in_container = AsyncMock(return_value="ok")
     docker.stop = AsyncMock()
@@ -228,6 +229,8 @@ class TestPluginInstallRollback:
     async def test_rollback_on_health_timeout(self, engine, mock_docker):
         """Failed health check triggers rollback."""
         mock_docker.is_healthy = AsyncMock(return_value=False)
+        mock_docker.get_container_status = AsyncMock(return_value="starting")
+        mock_docker.get_logs = AsyncMock(return_value="waiting for startup...")
         await engine._dns.start_for_sandbox("sb1", "abc.sandbox.local", 5300)
 
         with pytest.raises(PluginInstallError):

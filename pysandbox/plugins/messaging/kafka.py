@@ -41,7 +41,8 @@ class KafkaPlugin(PluginDefinition):
                 "test": ["CMD-SHELL", f"kafka-topics --bootstrap-server {host}:9092 --list || exit 1"],
                 "interval": 10_000_000_000,
                 "timeout": 5_000_000_000,
-                "retries": 12,
+                "retries": 40,
+                "start_period": 30_000_000_000,
             },
         }
 

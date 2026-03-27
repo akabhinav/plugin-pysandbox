@@ -41,7 +41,8 @@ class LocalStackPlugin(PluginDefinition):
                 "test": ["CMD-SHELL", "curl -sf http://localhost:4566/_localstack/health || exit 1"],
                 "interval": 10_000_000_000,
                 "timeout": 5_000_000_000,
-                "retries": 15,
+                "retries": 60,
+                "start_period": 30_000_000_000,
             },
         }
 

@@ -28,7 +28,8 @@ class DockerDaemonPlugin(PluginDefinition):
                 "test": ["CMD-SHELL", "docker info || exit 1"],
                 "interval": 10_000_000_000,
                 "timeout": 5_000_000_000,
-                "retries": 10,
+                "retries": 40,
+                "start_period": 30_000_000_000,
             },
         }
 

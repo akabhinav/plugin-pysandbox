@@ -271,13 +271,26 @@ class PluginEngine:
     async def _wait_healthy(self, container_id: str, timeout: int) -> None:
         """Poll container health until healthy or timeout."""
         elapsed = 0
-        interval = 2
+        interval = 3
         while elapsed < timeout:
-            if await self._docker.is_healthy(container_id):
+            status = await self._docker.get_container_status(container_id)
+            if status == "healthy":
                 return
+            if status in ("exited", "dead", "removing"):
+                logs = await self._docker.get_logs(container_id, tail=20)
+                raise RuntimeError(
+                    f"Container {container_id[:12]} died ({status}). Last logs:\n{logs}"
+                )
             await asyncio.sleep(interval)
             elapsed += interval
-        raise TimeoutError(f"Container {container_id[:12]} not healthy after {timeout}s")
+        # Grab logs for diagnostics
+        try:
+            logs = await self._docker.get_logs(container_id, tail=15)
+        except Exception:
+            logs = "(could not retrieve logs)"
+        raise TimeoutError(
+            f"Container {container_id[:12]} not healthy after {timeout}s. Logs:\n{logs}"
+        )
 
     async def _rollback(self, stack: list[tuple[str, Any]]) -> None:
         """Execute rollback steps in reverse order. Each step is best-effort."""

@@ -164,15 +164,26 @@ class DockerRuntime:
 
     async def is_healthy(self, container_id: str) -> bool:
         """Check if a container's health status is 'healthy'."""
+        return (await self.get_container_status(container_id)) == "healthy"
+
+    async def get_container_status(self, container_id: str) -> str:
+        """Get container health or run status.
+
+        Returns 'healthy', 'unhealthy', 'starting', 'running' (no healthcheck),
+        or Docker state like 'exited', 'dead', etc.
+        """
         def _check():
             client = self._get_client()
             try:
                 container = client.containers.get(container_id)
                 container.reload()
-                health = container.attrs.get("State", {}).get("Health", {})
-                return health.get("Status") == "healthy"
+                state = container.attrs.get("State", {})
+                health = state.get("Health", {})
+                if health:
+                    return health.get("Status", "unknown")
+                return state.get("Status", "unknown")
             except Exception:
-                return False
+                return "unknown"
 
         return await asyncio.to_thread(_check)
 

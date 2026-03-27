@@ -43,7 +43,8 @@ class CassandraPlugin(PluginDefinition):
                 "test": ["CMD-SHELL", "nodetool status | grep -q '^UN'"],
                 "interval": 15_000_000_000,
                 "timeout": 10_000_000_000,
-                "retries": 12,
+                "retries": 40,
+                "start_period": 30_000_000_000,
             },
         }
 

@@ -52,6 +52,7 @@ class PostgresPlugin(PluginDefinition):
                 "interval": 5_000_000_000,
                 "timeout": 3_000_000_000,
                 "retries": 10,
+                "start_period": 30_000_000_000,
             },
         }
 

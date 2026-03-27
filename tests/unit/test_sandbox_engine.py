@@ -31,6 +31,7 @@ def mock_docker():
     docker.remove_network = AsyncMock()
     docker.create_and_start = AsyncMock(return_value="container-123")
     docker.is_healthy = AsyncMock(return_value=True)
+    docker.get_container_status = AsyncMock(return_value="healthy")
     docker.get_container_ip = AsyncMock(return_value="172.20.0.3")
     docker.exec_in_container = AsyncMock(return_value="ok")
     docker.stop = AsyncMock()
