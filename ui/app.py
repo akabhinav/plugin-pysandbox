@@ -7,7 +7,7 @@ import streamlit as st
 
 import os
 
-API_BASE = os.getenv("API_BASE", "http://localhost:8080")
+API_BASE = os.getenv("API_BASE", "http://localhost:18080")
 
 
 # ── API Client ──────────────────────────────────────────────────────────────
@@ -224,8 +224,8 @@ def page_dashboard():
         st.markdown("""
         <div class="empty-state">
             <div class="empty-icon">🔌</div>
-            <div class="empty-text">Cannot reach PySandbox API at <code>localhost:8080</code></div>
-            <div style="color:#bbb; margin-top:8px;">Start the server with <code>uvicorn pysandbox.main:app --port 8080</code></div>
+            <div class="empty-text">Cannot reach PySandbox API at <code>{API_BASE}</code></div>
+            <div style="color:#bbb; margin-top:8px;">Start the server with <code>uvicorn pysandbox.main:app --port 18080</code></div>
         </div>
         """, unsafe_allow_html=True)
         return
@@ -414,8 +414,8 @@ def page_sandbox_detail():
     """, unsafe_allow_html=True)
 
     # Tabs
-    tab_plugins, tab_env, tab_dns, tab_tools = st.tabs([
-        f"🔌 Plugins ({len(plugins)})", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools"
+    tab_plugins, tab_run, tab_env, tab_dns, tab_tools = st.tabs([
+        f"🔌 Plugins ({len(plugins)})", "▶️ Run Tool", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools"
     ])
 
     # ── Plugins Tab ──
@@ -500,6 +500,142 @@ def page_sandbox_detail():
                         if st.button("Close", key=f"close_{tool_key}"):
                             del st.session_state[tool_key]
                             st.rerun()
+
+    # ── Run Tool Tab ──
+    with tab_run:
+        st.markdown('<div class="section-header">Execute Plugin Tools</div>', unsafe_allow_html=True)
+
+        if status != "running":
+            st.warning("Sandbox must be running to execute tools.")
+        elif not plugins:
+            st.info("Install a plugin first to get tools you can execute.")
+        else:
+            # Fetch all available tools
+            all_tools = api("GET", f"/v1/sandboxes/{sandbox_id}/agent/tools")
+            tool_list = all_tools.get("tools", []) if all_tools else []
+
+            if not tool_list:
+                st.info("No tools available. Install plugins to add tools.")
+            else:
+                # Tool selector
+                tool_names = [t["name"] for t in tool_list]
+                tool_map = {t["name"]: t for t in tool_list}
+
+                selected_tool = st.selectbox(
+                    "Select a tool to execute",
+                    options=tool_names,
+                    help="Choose a tool provided by one of the installed plugins",
+                )
+
+                if selected_tool:
+                    tool_info = tool_map[selected_tool]
+                    st.markdown(f"""
+                    <div class="tool-card">
+                        <span class="tool-name">{selected_tool}</span>
+                        <div class="tool-desc">{tool_info.get('description', 'No description')}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # Build parameter form from tool schema
+                    params = tool_info.get("parameters", {})
+                    param_props = params.get("properties", {}) if isinstance(params, dict) else {}
+                    required_params = params.get("required", []) if isinstance(params, dict) else []
+
+                    with st.form(f"run_tool_{selected_tool}"):
+                        st.markdown("**Parameters**")
+                        param_values = {}
+
+                        if param_props:
+                            for pname, pschema in param_props.items():
+                                ptype = pschema.get("type", "string")
+                                pdesc = pschema.get("description", "")
+                                req_marker = " *" if pname in required_params else ""
+                                label = f"{pname}{req_marker}"
+
+                                if ptype == "boolean":
+                                    param_values[pname] = st.checkbox(label, help=pdesc)
+                                elif ptype == "integer":
+                                    param_values[pname] = st.number_input(
+                                        label, step=1, value=pschema.get("default", 0), help=pdesc
+                                    )
+                                elif ptype == "number":
+                                    param_values[pname] = st.number_input(
+                                        label, value=float(pschema.get("default", 0.0)), help=pdesc
+                                    )
+                                else:
+                                    default = pschema.get("default", "")
+                                    # Use text_area for params that typically hold code or long text
+                                    if any(kw in pname.lower() for kw in ("query", "code", "body", "script", "command", "sql", "message", "content", "data")):
+                                        param_values[pname] = st.text_area(
+                                            label, value=str(default) if default else "",
+                                            height=120, help=pdesc,
+                                        )
+                                    else:
+                                        param_values[pname] = st.text_input(
+                                            label, value=str(default) if default else "", help=pdesc,
+                                        )
+
+                        else:
+                            st.markdown("_This tool takes no parameters._")
+
+                        col_run, col_json = st.columns([1, 1])
+                        with col_run:
+                            run_clicked = st.form_submit_button(
+                                "▶️ Execute", type="primary", use_container_width=True
+                            )
+                        with col_json:
+                            show_raw = st.form_submit_button(
+                                "📋 Show as JSON", use_container_width=True
+                            )
+
+                        if run_clicked:
+                            # Filter out empty optional params
+                            cleaned = {}
+                            for k, v in param_values.items():
+                                if v != "" and v is not None:
+                                    cleaned[k] = v
+
+                            with st.spinner(f"Executing {selected_tool}..."):
+                                result = api(
+                                    "POST",
+                                    f"/v1/sandboxes/{sandbox_id}/agent/tools/{selected_tool}/execute",
+                                    json={"params": cleaned},
+                                )
+
+                            if result:
+                                st.toast(f"Tool '{selected_tool}' executed!", icon="✅")
+                                st.session_state[f"tool_result_{sandbox_id}"] = result
+                            else:
+                                st.error(f"Failed to execute '{selected_tool}'")
+
+                        if show_raw:
+                            cleaned = {k: v for k, v in param_values.items() if v != "" and v is not None}
+                            st.code(
+                                f"POST /v1/sandboxes/{sandbox_id}/agent/tools/{selected_tool}/execute\n"
+                                + f'{{"params": {cleaned}}}',
+                                language="json",
+                            )
+
+                # Show last result
+                result_key = f"tool_result_{sandbox_id}"
+                if st.session_state.get(result_key):
+                    res = st.session_state[result_key]
+                    st.markdown('<div class="section-header">Result</div>', unsafe_allow_html=True)
+                    res_status = res.get("status", "unknown")
+                    if res_status == "completed":
+                        st.success(f"Status: {res_status}")
+                    else:
+                        st.error(f"Status: {res_status}")
+
+                    result_data = res.get("result", res.get("error", "No output"))
+                    if isinstance(result_data, dict) or isinstance(result_data, list):
+                        st.json(result_data)
+                    else:
+                        st.code(str(result_data))
+
+                    if st.button("Clear Result"):
+                        del st.session_state[result_key]
+                        st.rerun()
 
     # ── Environment Tab ──
     with tab_env:
@@ -633,10 +769,27 @@ def page_catalog():
                     </div>
                     """, unsafe_allow_html=True)
 
-                    if st.button(f"View Details", key=f"cat_detail_{p['id']}", use_container_width=True):
-                        st.session_state.page = "plugin_detail"
-                        st.session_state.plugin_detail_id = p["id"]
-                        st.rerun()
+                    bc1, bc2 = st.columns(2)
+                    with bc1:
+                        if st.button("View Details", key=f"cat_detail_{p['id']}", use_container_width=True):
+                            st.session_state.page = "plugin_detail"
+                            st.session_state.plugin_detail_id = p["id"]
+                            st.rerun()
+                    with bc2:
+                        if st.button("🚀 Quick Launch", key=f"launch_{p['id']}", use_container_width=True, type="primary"):
+                            result = api("POST", "/v1/sandboxes", json={
+                                "name": f"{p['id']}-sandbox",
+                                "owner_id": "default",
+                                "plugins": [{"plugin_id": p["id"], "name": p["id"]}],
+                            })
+                            if result:
+                                st.toast(f"Created sandbox with {p['id']}!", icon="🚀")
+                                st.session_state.page = "sandbox_detail"
+                                st.session_state.sandbox_id = result["sandbox"]["id"]
+                                time.sleep(0.5)
+                                st.rerun()
+                            else:
+                                st.toast(f"Failed to launch {p['id']}", icon="🚨")
 
 
 def page_plugin_detail():
