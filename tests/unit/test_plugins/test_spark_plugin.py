@@ -30,17 +30,17 @@ class TestSparkPlugin:
         assert env["SPARK_DEPLOY_MODE"] == "cluster"
 
     def test_get_docker_config_cluster_mode(self):
-        """Spark runs master + workers via entrypoint script."""
+        """Spark runs master + workers via spark-class entrypoint."""
         plugin = get_plugin("spark")
         cfg = plugin.get_docker_config("spark", "sb123", "abc.sandbox.local", {}, {}, "3.5.4")
 
         assert cfg["image"] == "apache/spark:3.5.4"
         assert "healthcheck" in cfg
-        # Command should be bash script that starts master + workers
         assert cfg["command"][0] == "bash"
         assert cfg["command"][1] == "-c"
-        assert "start-master.sh" in cfg["command"][2]
-        assert "start-worker.sh" in cfg["command"][2]
+        script = cfg["command"][2]
+        assert "spark-class org.apache.spark.deploy.master.Master" in script
+        assert "spark-class org.apache.spark.deploy.worker.Worker" in script
 
     def test_get_docker_config_default_workers(self):
         """Default is 2 workers with 2 cores each."""
@@ -62,7 +62,6 @@ class TestSparkPlugin:
         assert env["SPARK_WORKERS"] == "4"
         assert env["SPARK_WORKER_CORES"] == "4"
         assert env["SPARK_WORKER_MEMORY"] == "2g"
-        # Entrypoint should launch 4 workers
         assert "seq 1 4" in cfg["command"][2]
 
     def test_get_docker_config_with_lakehouse(self):
@@ -100,11 +99,11 @@ class TestSparkPlugin:
         cmds = plugin.get_init_commands("spark", {}, {})
         assert cmds == []
 
-    def test_healthcheck_checks_both_master_and_worker(self):
-        """Healthcheck verifies both master (8080) and worker (8081) are up."""
+    def test_healthcheck_verifies_alive_workers(self):
+        """Healthcheck queries master API to confirm workers are registered."""
         plugin = get_plugin("spark")
         cfg = plugin.get_docker_config("spark", "sb123", "abc.sandbox.local", {}, {}, "3.5.4")
 
         hc_test = cfg["healthcheck"]["test"][1]
-        assert "8080" in hc_test  # master
-        assert "8081" in hc_test  # worker
+        assert "8080/json/" in hc_test
+        assert "aliveworkers" in hc_test

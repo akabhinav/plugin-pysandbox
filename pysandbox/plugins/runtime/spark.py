@@ -30,33 +30,41 @@ class SparkPlugin(PluginDefinition):
         worker_cores = config.get("worker_cores", 2)
         worker_memory = config.get("worker_memory", "1g")
 
-        # Entrypoint script: start master, then N workers, then wait
+        # Use spark-class directly (sbin scripts don't work in apache/spark image)
         start_script = (
             "#!/bin/bash\n"
-            "set -e\n"
             "export SPARK_HOME=/opt/spark\n"
-            "export SPARK_MASTER_HOST=0.0.0.0\n"
-            "export SPARK_LOG_DIR=/opt/spark/logs\n"
+            "export SPARK_LOG_DIR=/tmp/spark-logs\n"
             "mkdir -p $SPARK_LOG_DIR\n"
             "\n"
-            "# Start Spark Master\n"
-            "$SPARK_HOME/sbin/start-master.sh\n"
-            "echo 'Waiting for master to start...'\n"
-            "for i in $(seq 1 30); do\n"
+            "# Start Spark Master in background\n"
+            "$SPARK_HOME/bin/spark-class org.apache.spark.deploy.master.Master "
+            "--host 0.0.0.0 --port 7077 --webui-port 8080 "
+            "> $SPARK_LOG_DIR/master.out 2>&1 &\n"
+            "MASTER_PID=$!\n"
+            "echo \"Master PID: $MASTER_PID\"\n"
+            "\n"
+            "# Wait for master to be ready\n"
+            "for i in $(seq 1 60); do\n"
             "  curl -sf http://localhost:8080/ > /dev/null 2>&1 && break\n"
             "  sleep 1\n"
             "done\n"
+            "echo 'Master ready'\n"
             "\n"
-            f"# Start {workers} Spark Worker(s)\n"
+            f"# Start {workers} Spark Worker(s) in background\n"
             f"for i in $(seq 1 {workers}); do\n"
-            f"  SPARK_WORKER_CORES={worker_cores} SPARK_WORKER_MEMORY={worker_memory} "
-            "$SPARK_HOME/sbin/start-worker.sh spark://localhost:7077\n"
-            "  echo \"Worker $i started\"\n"
+            f"  WPORT=$((8080 + $i))\n"
+            f"  $SPARK_HOME/bin/spark-class org.apache.spark.deploy.worker.Worker "
+            f"spark://localhost:7077 "
+            f"--cores {worker_cores} --memory {worker_memory} "
+            f"--webui-port $WPORT "
+            f"> $SPARK_LOG_DIR/worker-$i.out 2>&1 &\n"
+            "  echo \"Worker $i started (PID: $!, UI: $WPORT)\"\n"
             "done\n"
             "\n"
-            "echo 'Spark cluster ready: master + workers'\n"
-            "# Keep container alive by tailing logs\n"
-            "tail -f $SPARK_LOG_DIR/*.out\n"
+            "echo 'Spark cluster ready'\n"
+            "# Keep container alive - wait for master process\n"
+            "wait $MASTER_PID\n"
         )
 
         return {
@@ -64,8 +72,6 @@ class SparkPlugin(PluginDefinition):
             "command": ["bash", "-c", start_script],
             "environment": {
                 "SPARK_HOME": "/opt/spark",
-                "SPARK_MASTER_HOST": "0.0.0.0",
-                "SPARK_NO_DAEMONIZE": "false",
                 # Lakehouse config
                 "NESSIE_URI": f"http://{nessie_host}:19120/api/v1",
                 "S3_ENDPOINT": f"http://{minio_host}:9000",
@@ -79,11 +85,13 @@ class SparkPlugin(PluginDefinition):
             },
             "healthcheck": {
                 "test": ["CMD-SHELL",
-                         "curl -sf http://localhost:8080/ && "
-                         "curl -sf http://localhost:8081/ || exit 1"],
+                         "curl -sf http://localhost:8080/json/ | "
+                         "python3 -c \"import sys,json; d=json.load(sys.stdin); "
+                         "exit(0 if d.get('aliveworkers',0)>0 else 1)\" "
+                         "|| exit 1"],
                 "interval": 10_000_000_000,
                 "timeout": 5_000_000_000,
-                "retries": 30,
+                "retries": 40,
                 "start_period": 45_000_000_000,
             },
         }
