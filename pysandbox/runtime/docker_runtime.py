@@ -46,6 +46,8 @@ class DockerRuntime:
             networks = client.networks.list(filters={"label": "pysandbox.sandbox_id"})
             for n in networks:
                 try:
+                    if n.name == name:
+                        continue  # Don't prune the network we're trying to create
                     n.reload()
                     containers = n.attrs.get("Containers", {})
                     if not containers:
@@ -128,6 +130,22 @@ class DockerRuntime:
 
             # Parse memory limit
             mem_bytes = _parse_memory_bytes(memory_limit)
+
+            # Pull image first (can be slow), before touching the network
+            try:
+                client.images.get(image)
+            except Exception:
+                logger.info("pulling_image", image=image)
+                client.images.pull(image)
+
+            # Verify network still exists before creating container
+            try:
+                client.networks.get(network)
+            except Exception as e:
+                raise RuntimeError(
+                    f"Network '{network}' not found before container create. "
+                    f"It may have been removed by a concurrent operation."
+                ) from e
 
             container = client.containers.run(
                 image=image,
@@ -374,14 +392,22 @@ class DockerRuntime:
 
         return await asyncio.to_thread(_list)
 
-    async def prune_managed_networks(self) -> list[str]:
-        """Remove all pysandbox networks that have no running containers."""
+    async def prune_managed_networks(self, active_network_names: set[str] | None = None) -> list[str]:
+        """Remove pysandbox networks that have no running containers.
+
+        Networks listed in *active_network_names* are never pruned,
+        even if they are momentarily empty (e.g. between plugin installs).
+        """
+        active = active_network_names or set()
+
         def _prune():
             client = self._get_client()
             networks = client.networks.list(filters={"label": "pysandbox.sandbox_id"})
             removed = []
             for n in networks:
                 try:
+                    if n.name in active:
+                        continue  # Skip networks belonging to active sandboxes
                     n.reload()
                     containers = n.attrs.get("Containers", {})
                     if not containers:

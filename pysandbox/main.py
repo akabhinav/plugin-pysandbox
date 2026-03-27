@@ -117,8 +117,14 @@ async def lifespan(app: FastAPI):
     await ttl_manager.start()
 
     # Auto-prune orphaned networks on startup to prevent pool exhaustion
+    # Protect networks belonging to active (non-destroyed) sandboxes
     try:
-        pruned = await docker_runtime.prune_managed_networks()
+        all_sandboxes = await sandbox_repo.list_all()
+        active_nets = {
+            s["docker_network"] for s in all_sandboxes
+            if s.get("status") not in ("destroyed", None)
+        }
+        pruned = await docker_runtime.prune_managed_networks(active_network_names=active_nets)
         if pruned:
             logger.info("startup_network_prune", count=len(pruned), networks=pruned)
     except Exception:
