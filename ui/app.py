@@ -443,15 +443,13 @@ def page_sandbox_detail():
         pid = p.get("plugin_id", "")
         if hp and pid in WEB_PLUGINS:
             url = f"http://localhost:{hp}"
-            # Add token for Jupyter
-            env_data = api("GET", f"/v1/sandboxes/{sandbox_id}/env")
-            token = ""
-            if env_data and env_data.get("env"):
-                token = env_data["env"].get("JUPYTER_TOKEN", "")
-            if pid == "jupyter" and token:
-                display_url = f"{url}?token={token}"
-            else:
-                display_url = url
+            display_url = url
+            if pid == "jupyter":
+                env_data = api("GET", f"/v1/sandboxes/{sandbox_id}/env?reveal=JUPYTER_TOKEN")
+                if env_data and env_data.get("env"):
+                    token = env_data["env"].get("JUPYTER_TOKEN", "")
+                    if token and token != "***":
+                        display_url = f"{url}?token={token}"
             web_links.append((p.get("plugin_name", pid), display_url, pid))
 
     if web_links:

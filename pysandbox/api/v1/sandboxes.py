@@ -92,10 +92,18 @@ async def resume_sandbox(sandbox_id: str, request: Request):
 
 
 @router.get("/{sandbox_id}/env")
-async def get_sandbox_env(sandbox_id: str, request: Request):
-    """Get all injected env vars (secrets redacted)."""
+async def get_sandbox_env(sandbox_id: str, request: Request, reveal: str | None = None):
+    """Get all injected env vars (secrets redacted unless specific keys requested)."""
     env_injector = request.app.state.env_injector
-    return {"env": env_injector.get_redacted(sandbox_id)}
+    redacted = env_injector.get_redacted(sandbox_id)
+    # Allow revealing specific keys (e.g. ?reveal=JUPYTER_TOKEN for Quick Access links)
+    if reveal:
+        raw = env_injector.get_all(sandbox_id)
+        for key in reveal.split(","):
+            key = key.strip()
+            if key in raw:
+                redacted[key] = raw[key]
+    return {"env": redacted}
 
 
 @router.get("/{sandbox_id}/dns")
