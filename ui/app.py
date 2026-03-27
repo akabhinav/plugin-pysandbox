@@ -206,7 +206,7 @@ def page_dashboard():
             catalog_data = cat_data
 
     running = sum(1 for s in sandboxes if s.get("status") == "running")
-    paused = sum(1 for s in sandboxes if s.get("status") == "paused")
+    errored = sum(1 for s in sandboxes if s.get("status") == "error")
 
     # Metrics row
     cols = st.columns(4)
@@ -219,7 +219,10 @@ def page_dashboard():
     with cols[1]:
         st.markdown(metric_card(len(sandboxes), "Total Sandboxes", "blue"), unsafe_allow_html=True)
     with cols[2]:
-        st.markdown(metric_card(running, "Running", "green"), unsafe_allow_html=True)
+        if errored:
+            st.markdown(metric_card(f"{running} / {errored} err", "Running / Errors", "orange"), unsafe_allow_html=True)
+        else:
+            st.markdown(metric_card(running, "Running", "green"), unsafe_allow_html=True)
     with cols[3]:
         st.markdown(metric_card(catalog_data["total"], "Available Plugins"), unsafe_allow_html=True)
 
@@ -259,6 +262,9 @@ def page_dashboard():
         with st.container():
             c1, c2, c3 = st.columns([4, 2, 2])
             with c1:
+                error_html = ""
+                if status == "error" and sb.get("error"):
+                    error_html = f'<p style="color:#dc3545;font-size:0.85rem;margin-top:8px;background:#fff5f5;padding:8px 12px;border-radius:6px;border-left:4px solid #dc3545;"><strong>Error:</strong> {sb["error"]}</p>'
                 st.markdown(f"""
                 <div class="sandbox-card">
                     <p class="sandbox-name">{STATUS_ICONS.get(status, '⚪')} {sb['name']}</p>
@@ -267,6 +273,7 @@ def page_dashboard():
                         {status_badge(status)}
                         &nbsp;&nbsp;🌐 <code>{sb.get('dns_zone', '—')}</code>
                     </p>
+                    {error_html}
                 </div>
                 """, unsafe_allow_html=True)
             with c2:
@@ -423,6 +430,10 @@ def page_sandbox_detail():
         </table>
     </div>
     """, unsafe_allow_html=True)
+
+    # Error details banner
+    if status == "error" and sb.get("error"):
+        st.error(f"**Sandbox failed:** {sb['error']}")
 
     # Tabs
     tab_plugins, tab_run, tab_env, tab_dns, tab_tools = st.tabs([
