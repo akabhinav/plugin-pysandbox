@@ -137,6 +137,11 @@ class SandboxEngine:
             sandbox["status"] = SandboxState.ERROR.value
             sandbox["error"] = str(e)
             await self._repo.update(sandbox)
+            # Clean up the network we created so it doesn't leak
+            try:
+                await self._docker.remove_network(sandbox["docker_network"])
+            except Exception:
+                log.warning("cleanup_network_on_error_failed")
             raise
 
     async def pause(self, sandbox_id: str) -> None:
@@ -190,12 +195,25 @@ class SandboxEngine:
                 await self._plugins.remove(sandbox_id, inst["plugin_name"])
             except Exception:
                 log.exception("plugin_remove_error", plugin=inst["plugin_name"])
+                # Force remove container even if plugin remove failed
+                cid = inst.get("container_id")
+                if cid:
+                    try:
+                        await self._docker.remove(cid, force=True)
+                    except Exception:
+                        pass
 
         # Stop agent and DNS
-        await self._agent.destroy(sandbox_id)
-        await self._dns.stop_for_sandbox(sandbox_id)
+        try:
+            await self._agent.destroy(sandbox_id)
+        except Exception:
+            log.warning("agent_destroy_failed")
+        try:
+            await self._dns.stop_for_sandbox(sandbox_id)
+        except Exception:
+            log.warning("dns_stop_failed")
 
-        # Remove network
+        # Remove network (force-disconnects remaining containers)
         sandbox = await self._repo.get(sandbox_id)
         if sandbox:
             await self._docker.remove_network(sandbox["docker_network"])

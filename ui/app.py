@@ -294,7 +294,7 @@ def page_dashboard():
                         st.toast(f"Resumed {sb['name']}", icon="▶️")
                         time.sleep(0.5)
                         st.rerun()
-                elif status == "error":
+                elif status in ("error", "creating", "destroying"):
                     if st.button("🗑️ Destroy", key=f"destroy_{sb['id']}", use_container_width=True):
                         api("DELETE", f"/v1/sandboxes/{sb['id']}")
                         st.toast(f"Destroyed {sb['name']}", icon="🗑️")

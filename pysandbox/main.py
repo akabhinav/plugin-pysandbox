@@ -99,6 +99,14 @@ async def lifespan(app: FastAPI):
     app.state.secret_manager = secret_manager
     app.state.plugin_instance_repo = instance_repo
 
+    # Auto-prune orphaned networks on startup to prevent pool exhaustion
+    try:
+        pruned = await docker_runtime.prune_managed_networks()
+        if pruned:
+            logger.info("startup_network_prune", count=len(pruned), networks=pruned)
+    except Exception:
+        logger.warning("startup_network_prune_failed")
+
     logger.info("pysandbox_ready")
     yield
 

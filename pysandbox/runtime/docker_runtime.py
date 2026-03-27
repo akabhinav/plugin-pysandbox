@@ -28,7 +28,7 @@ class DockerRuntime:
         return self._client
 
     async def create_network(self, name: str, labels: dict[str, str] | None = None) -> str:
-        """Create a Docker bridge network. Returns network ID."""
+        """Create a Docker bridge network. Auto-prunes orphaned networks on pool exhaustion."""
         def _create():
             client = self._get_client()
             network = client.networks.create(
@@ -39,17 +39,57 @@ class DockerRuntime:
             )
             return network.id
 
-        network_id = await asyncio.to_thread(_create)
+        def _prune_and_create():
+            """Prune orphaned pysandbox networks and retry create."""
+            client = self._get_client()
+            pruned = 0
+            networks = client.networks.list(filters={"label": "pysandbox.sandbox_id"})
+            for n in networks:
+                try:
+                    n.reload()
+                    containers = n.attrs.get("Containers", {})
+                    if not containers:
+                        n.remove()
+                        pruned += 1
+                except Exception:
+                    pass
+            logger.info("auto_pruned_networks", count=pruned)
+            # Retry create
+            network = client.networks.create(
+                name=name,
+                driver="bridge",
+                labels=labels or {},
+                check_duplicate=True,
+            )
+            return network.id
+
+        try:
+            network_id = await asyncio.to_thread(_create)
+        except Exception as e:
+            if "address pools" in str(e).lower() or "subnetted" in str(e).lower():
+                logger.warning("network_pool_exhausted_auto_pruning")
+                network_id = await asyncio.to_thread(_prune_and_create)
+            else:
+                raise
+
         logger.info("docker_network_created", name=name, id=network_id[:12])
         return network_id
 
     async def remove_network(self, name: str) -> None:
-        """Remove a Docker network by name."""
+        """Remove a Docker network by name. Force-disconnects any remaining containers."""
         def _remove():
             client = self._get_client()
             try:
                 network = client.networks.get(name)
+                network.reload()
+                # Force disconnect any remaining containers
+                for cid in list(network.attrs.get("Containers", {}).keys()):
+                    try:
+                        network.disconnect(cid, force=True)
+                    except Exception:
+                        pass
                 network.remove()
+                logger.info("network_removed", name=name)
             except Exception:
                 logger.warning("network_remove_failed", name=name)
 
