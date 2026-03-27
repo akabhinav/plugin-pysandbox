@@ -239,13 +239,47 @@ def page_dashboard():
         return
 
     # Quick actions
-    col_left, col_right = st.columns([2, 1])
+    col_left, col_r1, col_r2, col_r3 = st.columns([3, 1, 1, 1])
     with col_left:
         st.markdown('<div class="section-header">Sandboxes</div>', unsafe_allow_html=True)
-    with col_right:
+    with col_r1:
         if st.button("➕ New Sandbox", use_container_width=True, type="primary"):
             st.session_state.page = "create_sandbox"
             st.rerun()
+    with col_r2:
+        if st.button("🚀 Templates", use_container_width=True):
+            st.session_state.page = "templates"
+            st.rerun()
+    with col_r3:
+        if st.button("📥 Import", use_container_width=True):
+            st.session_state.page = "import"
+            st.rerun()
+
+    # Batch operations
+    if sandboxes and len(sandboxes) > 1:
+        running_ids = [s["id"] for s in sandboxes if s.get("status") == "running"]
+        paused_ids = [s["id"] for s in sandboxes if s.get("status") == "paused"]
+        with st.expander("⚡ Batch Operations"):
+            bc1, bc2, bc3 = st.columns(3)
+            with bc1:
+                if running_ids and st.button(f"⏸️ Pause All ({len(running_ids)})", use_container_width=True):
+                    api("POST", "/v1/batch/pause", json={"sandbox_ids": running_ids})
+                    st.toast("Paused all running sandboxes", icon="⏸️")
+                    time.sleep(0.5)
+                    st.rerun()
+            with bc2:
+                if paused_ids and st.button(f"▶️ Resume All ({len(paused_ids)})", use_container_width=True):
+                    api("POST", "/v1/batch/resume", json={"sandbox_ids": paused_ids})
+                    st.toast("Resumed all paused sandboxes", icon="▶️")
+                    time.sleep(0.5)
+                    st.rerun()
+            with bc3:
+                all_ids = [s["id"] for s in sandboxes if s.get("status") != "destroyed"]
+                if all_ids and st.button(f"🗑️ Destroy All ({len(all_ids)})", use_container_width=True):
+                    api("POST", "/v1/batch/destroy", json={"sandbox_ids": all_ids})
+                    st.toast("Destroyed all sandboxes", icon="🗑️")
+                    time.sleep(0.5)
+                    st.rerun()
 
     if not sandboxes:
         st.markdown("""
@@ -481,8 +515,9 @@ def page_sandbox_detail():
                 """, unsafe_allow_html=True)
 
     # Tabs
-    tab_plugins, tab_run, tab_env, tab_dns, tab_tools = st.tabs([
-        f"🔌 Plugins ({len(plugins)})", "▶️ Run Tool", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools"
+    tab_plugins, tab_run, tab_monitor, tab_terminal, tab_timeline, tab_env, tab_dns, tab_tools, tab_settings = st.tabs([
+        f"🔌 Plugins ({len(plugins)})", "▶️ Run Tool", "📊 Monitoring", "💻 Terminal",
+        "📜 Timeline", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools", "⚙️ Settings"
     ])
 
     # ── Plugins Tab ──
@@ -797,6 +832,195 @@ def page_sandbox_detail():
                 <div class="empty-text">No agent tools registered. Install plugins to add tools.</div>
             </div>
             """, unsafe_allow_html=True)
+
+    # ── Monitoring Tab ──
+    with tab_monitor:
+        st.markdown('<div class="section-header">Live Resource Monitoring</div>', unsafe_allow_html=True)
+        if status != "running":
+            st.warning("Sandbox must be running to view resource usage.")
+        elif plugins:
+            monitor_data = api("GET", f"/v1/monitoring/resources/{sandbox_id}")
+            if monitor_data and monitor_data.get("stats"):
+                for stat in monitor_data["stats"]:
+                    pname = stat.get("plugin_name", "unknown")
+                    cpu_pct = stat.get("cpu_percent", 0)
+                    mem_used = stat.get("memory_usage_mb", 0)
+                    mem_limit = stat.get("memory_limit_mb", 0)
+                    mem_pct = stat.get("memory_percent", 0)
+                    net_rx = stat.get("network_rx_mb", 0)
+                    net_tx = stat.get("network_tx_mb", 0)
+                    st.markdown(f"#### {pname}")
+                    mc1, mc2, mc3, mc4 = st.columns(4)
+                    with mc1:
+                        st.metric("CPU", f"{cpu_pct}%")
+                    with mc2:
+                        st.metric("Memory", f"{mem_used:.0f} / {mem_limit:.0f} MB")
+                    with mc3:
+                        st.metric("Mem %", f"{mem_pct:.1f}%")
+                    with mc4:
+                        st.metric("Network", f"↓{net_rx:.1f} ↑{net_tx:.1f} MB")
+                    st.progress(min(cpu_pct / 100.0, 1.0))
+            else:
+                st.info("No monitoring data available. Containers may not be fully started.")
+
+            # Health Dashboard
+            st.markdown('<div class="section-header">Health Status</div>', unsafe_allow_html=True)
+            health_data = api("GET", f"/v1/monitoring/health/{sandbox_id}")
+            if health_data:
+                hc1, hc2, hc3 = st.columns(3)
+                with hc1:
+                    st.markdown(metric_card(health_data["total"], "Total Plugins", "blue"), unsafe_allow_html=True)
+                with hc2:
+                    st.markdown(metric_card(health_data["healthy"], "Healthy", "green"), unsafe_allow_html=True)
+                with hc3:
+                    st.markdown(metric_card(health_data["unhealthy"], "Unhealthy", "orange"), unsafe_allow_html=True)
+
+                for ph in health_data.get("plugins", []):
+                    st.markdown(f"""
+                    <div class="tool-card">
+                        <span class="tool-name">{STATUS_ICONS.get(ph['status'], '⚪')} {ph['plugin_name']}</span>
+                        <span style="float:right">{status_badge(ph['status'])}</span>
+                        <div class="tool-desc">Version: {ph.get('version', '—')} | Since: {ph.get('installed_at', '—')[:19]}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # Plugin logs
+            st.markdown('<div class="section-header">Plugin Logs</div>', unsafe_allow_html=True)
+            log_plugin = st.selectbox("Select plugin", [p.get("plugin_name", "") for p in plugins], key="log_plugin_sel")
+            log_lines = st.slider("Lines", 10, 500, 50, key="log_lines_sl")
+            if st.button("📋 Fetch Logs", key="fetch_logs_btn"):
+                logs_data = api("GET", f"/v1/monitoring/logs/{sandbox_id}/{log_plugin}?tail={log_lines}")
+                if logs_data:
+                    st.code(logs_data.get("logs", "No logs"), language="text")
+
+    # ── Terminal Tab ──
+    with tab_terminal:
+        st.markdown('<div class="section-header">Interactive Terminal</div>', unsafe_allow_html=True)
+        if status != "running":
+            st.warning("Sandbox must be running to use the terminal.")
+        elif plugins:
+            terminals_data = api("GET", f"/v1/terminal/{sandbox_id}")
+            terminals = terminals_data.get("terminals", []) if terminals_data else []
+            if terminals:
+                term_plugin = st.selectbox(
+                    "Select container",
+                    [t["plugin_name"] for t in terminals],
+                    key="term_plugin_sel"
+                )
+                cmd = st.text_input("Command", placeholder="ls -la /", key="term_cmd")
+                if st.button("▶️ Execute", key="term_exec", type="primary"):
+                    if cmd:
+                        result = api("POST", f"/v1/terminal/{sandbox_id}/{term_plugin}", json={"command": cmd})
+                        if result:
+                            st.session_state["term_result"] = result
+
+                if st.session_state.get("term_result"):
+                    res = st.session_state["term_result"]
+                    if res["status"] == "completed":
+                        st.success(f"Executed: {res['command']}")
+                    else:
+                        st.error(f"Error: {res['command']}")
+                    st.code(res.get("output", ""), language="text")
+                    if st.button("Clear", key="term_clear"):
+                        del st.session_state["term_result"]
+                        st.rerun()
+
+                # Command history / quick commands
+                st.markdown("**Quick Commands:**")
+                quick_cmds = ["ls -la /", "cat /etc/os-release", "ps aux", "df -h", "free -m", "env | sort"]
+                qc_cols = st.columns(3)
+                for qi, qcmd in enumerate(quick_cmds):
+                    with qc_cols[qi % 3]:
+                        if st.button(f"`{qcmd}`", key=f"qc_{qi}", use_container_width=True):
+                            result = api("POST", f"/v1/terminal/{sandbox_id}/{term_plugin}", json={"command": qcmd})
+                            if result:
+                                st.session_state["term_result"] = result
+                                st.rerun()
+            else:
+                st.info("No containers available for terminal access.")
+
+    # ── Timeline Tab ──
+    with tab_timeline:
+        st.markdown('<div class="section-header">Activity Timeline</div>', unsafe_allow_html=True)
+        tl_data = api("GET", f"/v1/timeline/{sandbox_id}?limit=50")
+        if tl_data and tl_data.get("entries"):
+            st.markdown(f"**{tl_data['total']}** total events")
+            for entry in tl_data["entries"]:
+                sev = entry.get("severity", "info")
+                sev_icon = {"info": "ℹ️", "success": "✅", "warning": "⚠️", "error": "❌"}.get(sev, "ℹ️")
+                ts = entry.get("timestamp", "")[:19].replace("T", " ")
+                plugin_str = f" [{entry['plugin_name']}]" if entry.get("plugin_name") else ""
+                st.markdown(f"""
+                <div class="tool-card" style="border-left-color: {'#28a745' if sev=='success' else '#ffc107' if sev=='warning' else '#dc3545' if sev=='error' else '#667eea'}">
+                    <span style="font-size:0.8rem; color:#999;">{sev_icon} {ts}{plugin_str}</span>
+                    <div style="margin-top:4px;">{entry.get('description', '')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="empty-icon">📜</div>
+                <div class="empty-text">No activity recorded yet</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        # Add manual note
+        with st.expander("Add a note"):
+            note = st.text_input("Note", key="timeline_note")
+            if st.button("📝 Add Note", key="add_note_btn"):
+                if note:
+                    api("POST", f"/v1/timeline/{sandbox_id}", json={
+                        "event_type": "user.note",
+                        "description": note,
+                        "severity": "info",
+                    })
+                    st.toast("Note added!", icon="📝")
+                    time.sleep(0.3)
+                    st.rerun()
+
+    # ── Settings Tab ──
+    with tab_settings:
+        st.markdown('<div class="section-header">Sandbox Settings</div>', unsafe_allow_html=True)
+
+        # TTL Management
+        st.markdown("#### ⏰ Time-to-Live (Auto-Destroy)")
+        ttl_data = api("GET", f"/v1/ttl/{sandbox_id}")
+        if ttl_data and "remaining_seconds" in ttl_data:
+            remaining = ttl_data["remaining_seconds"]
+            hours = remaining // 3600
+            mins = (remaining % 3600) // 60
+            st.info(f"TTL active: **{hours}h {mins}m** remaining (expires at {ttl_data['expires_at'][:19]})")
+            if st.button("🚫 Remove TTL (make permanent)", key="remove_ttl"):
+                api("DELETE", f"/v1/ttl/{sandbox_id}")
+                st.toast("TTL removed", icon="🚫")
+                time.sleep(0.3)
+                st.rerun()
+        else:
+            st.markdown("No TTL set — sandbox will run until manually destroyed.")
+            ttl_hours = st.number_input("Set TTL (hours)", min_value=1, max_value=720, value=24, key="ttl_hours")
+            if st.button("⏰ Set TTL", key="set_ttl", type="primary"):
+                api("POST", f"/v1/ttl/{sandbox_id}", json={"ttl_seconds": ttl_hours * 3600})
+                st.toast(f"TTL set to {ttl_hours} hours", icon="⏰")
+                time.sleep(0.3)
+                st.rerun()
+
+        st.markdown("---")
+
+        # Export
+        st.markdown("#### 📤 Export Configuration")
+        st.markdown("Export this sandbox's configuration as JSON to recreate it later.")
+        if st.button("📤 Export Sandbox Config", key="export_btn"):
+            export_data = api("GET", f"/v1/export/{sandbox_id}")
+            if export_data:
+                import json
+                st.code(json.dumps(export_data, indent=2), language="json")
+                st.download_button(
+                    "💾 Download JSON",
+                    json.dumps(export_data, indent=2),
+                    file_name=f"sandbox-{sb['name']}-export.json",
+                    mime="application/json",
+                    key="download_export",
+                )
 
 
 def page_catalog():
@@ -1163,6 +1387,89 @@ def page_containers():
         """, unsafe_allow_html=True)
 
 
+def page_templates():
+    """Browse and launch sandbox templates."""
+    st.markdown("## Sandbox Templates")
+    st.markdown("Launch pre-configured stacks with a single click.")
+
+    data = api("GET", "/v1/templates")
+    if not data:
+        st.info("Cannot load templates. Is the API running?")
+        return
+
+    templates = data.get("templates", [])
+    st.markdown(f"**{len(templates)}** templates available")
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    for i in range(0, len(templates), 3):
+        cols = st.columns(3)
+        for j, col in enumerate(cols):
+            if i + j < len(templates):
+                t = templates[i + j]
+                plugins_str = ", ".join(t.get("plugins", []))
+                with col:
+                    st.markdown(f"""
+                    <div class="plugin-card">
+                        <p class="plugin-name">{t.get('icon', '📦')} {t['name']}</p>
+                        <span class="plugin-category">{t.get('category', 'general')}</span>
+                        <p class="plugin-desc">{t.get('description', '')}</p>
+                        <div style="margin-top:8px; font-size:0.8rem; color:#999;">
+                            Plugins: <strong>{t.get('plugin_count', 0)}</strong> ({plugins_str})
+                            <br>Est. startup: ~{t.get('estimated_startup_seconds', 60)}s
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    name = st.text_input("Name", value=f"{t['id']}-sandbox", key=f"tpl_name_{t['id']}")
+                    if st.button(f"🚀 Launch {t['name']}", key=f"launch_tpl_{t['id']}", type="primary", use_container_width=True):
+                        result = api("POST", "/v1/templates/launch", json={
+                            "name": name,
+                            "template_id": t["id"],
+                        })
+                        if result:
+                            st.toast(f"Launched {t['name']}!", icon="🚀")
+                            st.session_state.page = "sandbox_detail"
+                            st.session_state.sandbox_id = result["sandbox"]["id"]
+                            time.sleep(0.5)
+                            st.rerun()
+
+
+def page_import():
+    """Import a sandbox from JSON config."""
+    st.markdown("## Import Sandbox")
+
+    if st.button("← Back to Dashboard"):
+        st.session_state.page = "dashboard"
+        st.rerun()
+
+    config_text = st.text_area("Paste exported sandbox JSON", height=300,
+                               help="Paste the JSON from a sandbox export")
+    name_override = st.text_input("Override name (optional)", placeholder="my-imported-sandbox")
+
+    if st.button("📥 Import", type="primary", use_container_width=True):
+        if not config_text:
+            st.error("Please paste a config")
+            return
+        try:
+            import json
+            config = json.loads(config_text)
+        except Exception:
+            st.error("Invalid JSON")
+            return
+
+        body = {"config": config}
+        if name_override:
+            body["name_override"] = name_override
+
+        result = api("POST", "/v1/export/import", json=body)
+        if result:
+            st.toast("Sandbox imported!", icon="📥")
+            st.session_state.page = "sandbox_detail"
+            st.session_state.sandbox_id = result["sandbox"]["id"]
+            time.sleep(0.5)
+            st.rerun()
+
+
 # ── Main App ────────────────────────────────────────────────────────────────
 
 def main():
@@ -1190,6 +1497,7 @@ def main():
 
         nav_items = {
             "dashboard": ("📊", "Dashboard"),
+            "templates": ("🚀", "Templates"),
             "catalog": ("📦", "Plugin Catalog"),
             "create_sandbox": ("➕", "New Sandbox"),
             "containers": ("🐳", "Containers"),
@@ -1234,6 +1542,10 @@ def main():
         page_plugin_detail()
     elif page == "containers":
         page_containers()
+    elif page == "templates":
+        page_templates()
+    elif page == "import":
+        page_import()
     else:
         page_dashboard()
 

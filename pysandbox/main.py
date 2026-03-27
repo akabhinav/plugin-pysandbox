@@ -9,7 +9,10 @@ from fastapi import FastAPI
 
 from pysandbox.agent.agent_runtime import AgentRuntime
 from pysandbox.agent.tool_registry import AgentToolRegistry
-from pysandbox.api.v1 import agent, catalog, containers, health, plugins, sandboxes
+from pysandbox.api.v1 import (
+    agent, batch, catalog, containers, export, health,
+    monitoring, plugins, sandboxes, templates, terminal, timeline, ttl,
+)
 from pysandbox.config.settings import get_settings
 from pysandbox.db.repos.plugin_instance_repo import PluginInstanceRepo
 from pysandbox.db.repos.sandbox_repo import SandboxRepo
@@ -18,6 +21,9 @@ from pysandbox.engine.health_monitor import HealthMonitor
 from pysandbox.engine.plugin_engine import PluginEngine
 from pysandbox.engine.resource_guard import ResourceGuard
 from pysandbox.engine.sandbox_engine import SandboxEngine
+from pysandbox.engine.activity_timeline import ActivityTimeline
+from pysandbox.engine.sandbox_ttl import SandboxTTLManager
+from pysandbox.engine.templates import TemplateRegistry
 from pysandbox.plugin.loader import discover_and_load_all
 from pysandbox.runtime.dns_server import SandboxDNSManager
 from pysandbox.runtime.docker_runtime import DockerRuntime
@@ -57,12 +63,16 @@ async def lifespan(app: FastAPI):
     sandbox_repo = SandboxRepo()
     instance_repo = PluginInstanceRepo()
     health_monitor = HealthMonitor(docker_runtime)
+    template_registry = TemplateRegistry()
+    activity_timeline = ActivityTimeline()
+    ttl_manager = SandboxTTLManager()
 
     # Wire event bus subscriptions
     event_bus.subscribe("plugin.installed", tool_registry.on_plugin_installed)
     event_bus.subscribe("plugin.removed", tool_registry.on_plugin_removed)
     event_bus.subscribe("plugin.installed", health_monitor.on_plugin_installed)
     event_bus.subscribe("plugin.removed", health_monitor.on_plugin_removed)
+    event_bus.subscribe("*", activity_timeline.on_event)
 
     # Build engines
     plugin_engine = PluginEngine(
@@ -98,6 +108,13 @@ async def lifespan(app: FastAPI):
     app.state.env_injector = env_injector
     app.state.secret_manager = secret_manager
     app.state.plugin_instance_repo = instance_repo
+    app.state.template_registry = template_registry
+    app.state.activity_timeline = activity_timeline
+    app.state.ttl_manager = ttl_manager
+
+    # Wire TTL manager to sandbox engine and start background checker
+    ttl_manager.set_engine(sandbox_engine)
+    await ttl_manager.start()
 
     # Auto-prune orphaned networks on startup to prevent pool exhaustion
     try:
@@ -112,6 +129,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("pysandbox_shutting_down")
+    await ttl_manager.stop()
     await health_monitor.stop_all()
     await docker_runtime.close()
     logger.info("pysandbox_stopped")
@@ -133,6 +151,13 @@ def create_app() -> FastAPI:
     app.include_router(plugins.router)
     app.include_router(agent.router)
     app.include_router(containers.router)
+    app.include_router(templates.router)
+    app.include_router(monitoring.router)
+    app.include_router(timeline.router)
+    app.include_router(ttl.router)
+    app.include_router(export.router)
+    app.include_router(batch.router)
+    app.include_router(terminal.router)
 
     return app
 

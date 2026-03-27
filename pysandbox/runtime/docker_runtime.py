@@ -243,6 +243,57 @@ class DockerRuntime:
 
         return await asyncio.to_thread(_get_ip)
 
+    async def get_container_stats(self, container_id: str) -> dict:
+        """Get live resource usage stats for a container."""
+        def _stats():
+            client = self._get_client()
+            try:
+                container = client.containers.get(container_id)
+                raw = container.stats(stream=False)
+
+                # Calculate CPU percentage
+                cpu_delta = raw["cpu_stats"]["cpu_usage"]["total_usage"] - \
+                    raw["precpu_stats"]["cpu_usage"]["total_usage"]
+                system_delta = raw["cpu_stats"]["system_cpu_usage"] - \
+                    raw["precpu_stats"]["system_cpu_usage"]
+                num_cpus = raw["cpu_stats"].get("online_cpus", 1)
+                cpu_percent = (cpu_delta / system_delta) * num_cpus * 100.0 if system_delta > 0 else 0.0
+
+                # Memory usage
+                mem_usage = raw["memory_stats"].get("usage", 0)
+                mem_limit = raw["memory_stats"].get("limit", 0)
+                mem_percent = (mem_usage / mem_limit) * 100.0 if mem_limit > 0 else 0.0
+
+                # Network I/O
+                net_rx = 0
+                net_tx = 0
+                for iface in raw.get("networks", {}).values():
+                    net_rx += iface.get("rx_bytes", 0)
+                    net_tx += iface.get("tx_bytes", 0)
+
+                return {
+                    "container_id": container_id[:12],
+                    "cpu_percent": round(cpu_percent, 2),
+                    "memory_usage_mb": round(mem_usage / 1024 / 1024, 1),
+                    "memory_limit_mb": round(mem_limit / 1024 / 1024, 1),
+                    "memory_percent": round(mem_percent, 2),
+                    "network_rx_mb": round(net_rx / 1024 / 1024, 2),
+                    "network_tx_mb": round(net_tx / 1024 / 1024, 2),
+                }
+            except Exception as e:
+                return {
+                    "container_id": container_id[:12],
+                    "error": str(e),
+                    "cpu_percent": 0,
+                    "memory_usage_mb": 0,
+                    "memory_limit_mb": 0,
+                    "memory_percent": 0,
+                    "network_rx_mb": 0,
+                    "network_tx_mb": 0,
+                }
+
+        return await asyncio.to_thread(_stats)
+
     async def get_logs(self, container_id: str, tail: int = 100) -> str:
         def _logs():
             client = self._get_client()
