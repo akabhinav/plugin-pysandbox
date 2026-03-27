@@ -436,9 +436,9 @@ def page_sandbox_detail():
         st.error(f"**Sandbox failed:** {sb['error']}")
 
     # Quick Access URLs for web-accessible plugins (only those with actual browser UIs)
-    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "rabbitmq", "minio", "neo4j"}
+    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "rabbitmq", "minio", "neo4j", "dremio"}
     # Map plugin_id -> which container port has the web UI
-    WEB_UI_PORTS = {"neo4j": 7474}  # default is the primary host_port
+    WEB_UI_PORTS = {"neo4j": 7474, "dremio": 9047}  # default is the primary host_port
     web_links = []
     for p in plugins:
         pid = p.get("plugin_id", "")
@@ -526,7 +526,7 @@ def page_sandbox_detail():
                     port_html = ""
                     pid = p.get("plugin_id", "")
                     web_pids = ("jupyter", "grafana", "prometheus", "jaeger",
-                                "rabbitmq", "minio", "neo4j")
+                                "rabbitmq", "minio", "neo4j", "dremio")
                     if host_ports_map and len(host_ports_map) > 1:
                         # Show all mapped ports
                         parts = []

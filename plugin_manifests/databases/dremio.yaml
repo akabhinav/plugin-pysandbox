@@ -1,0 +1,36 @@
+id: dremio
+version: "1.0.0"
+display_name: "Dremio"
+description: "Dremio data lakehouse platform — unified SQL analytics on data lakes"
+category: databases
+tags: [database, lakehouse, sql, dremio, iceberg, arrow, analytics]
+docker_image: "dremio/dremio-oss:{version}"
+supported_versions: ["latest", "25.1", "25.0", "24.3"]
+default_version: "latest"
+ports:
+  - port: 9047
+    protocol: tcp
+    name: web-ui
+  - port: 31010
+    protocol: tcp
+    name: odbc-jdbc
+  - port: 45678
+    protocol: tcp
+    name: arrow-flight
+resources:
+  cpu: "2.0"
+  memory: "4096m"
+  disk_gb: 10.0
+health_check:
+  type: http
+  port: 9047
+  path: "/"
+  interval_seconds: 10
+  timeout_seconds: 10
+  retries: 40
+config_params: []
+depends_on: []
+startup_order: 50
+generates_credentials: true
+persistent_data: true
+supports_hot_reload: false
