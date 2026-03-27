@@ -1,11 +1,11 @@
 id: kafka
 version: "1.0.0"
-display_name: "Apache Kafka"
-description: "Apache Kafka distributed event streaming platform"
+display_name: "Confluent Kafka"
+description: "Confluent Local Kafka - single-node KRaft mode for development"
 category: messaging
-tags: [messaging, streaming, event, kafka]
-docker_image: "apache/kafka:{version}"
-supported_versions: ["latest", "3.9.0", "3.8.1", "3.7.0"]
+tags: [messaging, streaming, event, kafka, confluent]
+docker_image: "confluentinc/confluent-local:{version}"
+supported_versions: ["latest", "7.9.0", "7.8.0", "7.7.0"]
 default_version: "latest"
 ports:
   - port: 9092

@@ -57,9 +57,9 @@ def make_kafka_produce(container_id: str, docker_runtime, bootstrap: str):
         message = _quote(params["message"])
         key = params.get("key")
         if key:
-            cmd = f"echo '{_quote(key)}:{message}' | /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server {bootstrap} --topic {topic} --property parse.key=true --property key.separator=:"
+            cmd = f"echo '{_quote(key)}:{message}' | kafka-console-producer --bootstrap-server {bootstrap} --topic {topic} --property parse.key=true --property key.separator=:"
         else:
-            cmd = f"echo '{message}' | /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server {bootstrap} --topic {topic}"
+            cmd = f"echo '{message}' | kafka-console-producer --bootstrap-server {bootstrap} --topic {topic}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
@@ -69,14 +69,14 @@ def make_kafka_consume(container_id: str, docker_runtime, bootstrap: str):
         topic = params["topic"]
         count = params.get("count", 10)
         timeout = params.get("timeout_ms", 5000)
-        cmd = f"/opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server {bootstrap} --topic {topic} --from-beginning --max-messages {count} --timeout-ms {timeout}"
+        cmd = f"kafka-console-consumer --bootstrap-server {bootstrap} --topic {topic} --from-beginning --max-messages {count} --timeout-ms {timeout}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
 
 def make_kafka_list_topics(container_id: str, docker_runtime, bootstrap: str):
     async def handler(params: dict) -> str:
-        cmd = f"/opt/kafka/bin/kafka-topics.sh --bootstrap-server {bootstrap} --list"
+        cmd = f"kafka-topics --bootstrap-server {bootstrap} --list"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
@@ -86,7 +86,7 @@ def make_kafka_create_topic(container_id: str, docker_runtime, bootstrap: str):
         topic = params["topic"]
         partitions = params.get("partitions", 1)
         rf = params.get("replication_factor", 1)
-        cmd = f"/opt/kafka/bin/kafka-topics.sh --bootstrap-server {bootstrap} --create --topic {topic} --partitions {partitions} --replication-factor {rf}"
+        cmd = f"kafka-topics --bootstrap-server {bootstrap} --create --topic {topic} --partitions {partitions} --replication-factor {rf}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
@@ -94,7 +94,7 @@ def make_kafka_create_topic(container_id: str, docker_runtime, bootstrap: str):
 def make_kafka_describe_topic(container_id: str, docker_runtime, bootstrap: str):
     async def handler(params: dict) -> str:
         topic = params["topic"]
-        cmd = f"/opt/kafka/bin/kafka-topics.sh --bootstrap-server {bootstrap} --describe --topic {topic}"
+        cmd = f"kafka-topics --bootstrap-server {bootstrap} --describe --topic {topic}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
@@ -102,14 +102,14 @@ def make_kafka_describe_topic(container_id: str, docker_runtime, bootstrap: str)
 def make_kafka_delete_topic(container_id: str, docker_runtime, bootstrap: str):
     async def handler(params: dict) -> str:
         topic = params["topic"]
-        cmd = f"/opt/kafka/bin/kafka-topics.sh --bootstrap-server {bootstrap} --delete --topic {topic}"
+        cmd = f"kafka-topics --bootstrap-server {bootstrap} --delete --topic {topic}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
 
 def make_kafka_groups(container_id: str, docker_runtime, bootstrap: str):
     async def handler(params: dict) -> str:
-        cmd = f"/opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server {bootstrap} --list"
+        cmd = f"kafka-consumer-groups --bootstrap-server {bootstrap} --list"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 
@@ -117,6 +117,6 @@ def make_kafka_groups(container_id: str, docker_runtime, bootstrap: str):
 def make_kafka_lag(container_id: str, docker_runtime, bootstrap: str):
     async def handler(params: dict) -> str:
         group_id = params["group_id"]
-        cmd = f"/opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server {bootstrap} --describe --group {group_id}"
+        cmd = f"kafka-consumer-groups --bootstrap-server {bootstrap} --describe --group {group_id}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler

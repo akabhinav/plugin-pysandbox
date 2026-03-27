@@ -29,14 +29,13 @@ class TestKafkaPlugin:
         assert env["KAFKA_HOST"] == "my-kafka.abc.sandbox.local"
 
     def test_get_docker_config_kraft(self):
-        """Kafka uses KRaft mode (no ZooKeeper)."""
+        """Kafka uses Confluent Local image (KRaft mode, no ZooKeeper)."""
         plugin = get_plugin("kafka")
         creds = {"username": "u", "password": "p"}
-        cfg = plugin.get_docker_config("kafka", "sb123", "abc.sandbox.local", creds, {}, "7.5.0")
+        cfg = plugin.get_docker_config("kafka", "sb123", "abc.sandbox.local", creds, {}, "latest")
 
-        env = cfg["environment"]
-        assert env["KAFKA_PROCESS_ROLES"] == "broker,controller"
-        assert "CLUSTER_ID" in env
+        assert cfg["image"] == "confluentinc/confluent-local:latest"
+        assert "KAFKA_ADVERTISED_LISTENERS" in cfg["environment"]
 
     def test_get_agent_tools(self):
         plugin = get_plugin("kafka")
