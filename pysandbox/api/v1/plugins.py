@@ -43,6 +43,7 @@ async def install_plugin(sandbox_id: str, req: InstallPluginRequest, request: Re
         "plugin_name": plugin_name,
         "dns_name": connection.dns_name,
         "host_port": connection.host_port,
+        "host_ports": connection.host_ports,
     }
 
 

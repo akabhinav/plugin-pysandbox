@@ -34,6 +34,7 @@ class PluginConnection:
     env_vars: dict[str, str]
     credentials: dict[str, str]
     connection_strings: dict[str, str]
+    host_ports: dict[int, int] = field(default_factory=dict)  # container_port -> host_port
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

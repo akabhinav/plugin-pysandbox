@@ -65,14 +65,18 @@ class DockerRuntime:
         docker_config: dict[str, Any],
         cpu_limit: float = 1.0,
         memory_limit: str = "512m",
+        port_mappings: dict[int, int] | None = None,
     ) -> str:
         """Create and start a container. Returns container ID."""
         def _create():
             client = self._get_client()
 
-            # Build port bindings
+            # Build port bindings — use port_mappings if provided, else single port
             ports = {}
-            if host_port and container_port:
+            if port_mappings:
+                for cport, hport in port_mappings.items():
+                    ports[f"{cport}/tcp"] = hport
+            elif host_port and container_port:
                 ports[f"{container_port}/tcp"] = host_port
 
             # Extract config

@@ -113,11 +113,16 @@ class PluginEngine:
             encrypted = self._secrets.encrypt(credentials)
             rollback_stack.append(("delete_credentials", lambda: None))
 
-            # Step 4: Allocate ports
+            # Step 4: Allocate ports for all manifest ports
             internal_port = definition.manifest.ports[0].port if definition.manifest.ports else 0
-            host_port = self._ports.allocate_host_port() if expose else None
-            if host_port:
-                rollback_stack.append(("release_port", lambda hp=host_port: self._ports.release_host_port(hp)))
+            port_mappings: dict[int, int] = {}
+            host_port: int | None = None
+            if expose and definition.manifest.ports:
+                for p in definition.manifest.ports:
+                    hp = self._ports.allocate_host_port()
+                    port_mappings[p.port] = hp
+                    rollback_stack.append(("release_port", lambda _hp=hp: self._ports.release_host_port(_hp)))
+                host_port = port_mappings[internal_port]  # primary port for backward compat
 
             # Step 5: Get docker config and start container
             docker_cfg = definition.get_docker_config(
@@ -132,6 +137,7 @@ class PluginEngine:
                 docker_config=docker_cfg,
                 cpu_limit=float(definition.manifest.resources.cpu),
                 memory_limit=definition.manifest.resources.memory,
+                port_mappings=port_mappings if port_mappings else None,
             )
             rollback_stack.append(("remove_container", lambda cid=container_id: self._docker.remove(cid, force=True)))
 
@@ -172,6 +178,7 @@ class PluginEngine:
                 env_vars=env_vars,
                 credentials=credentials,
                 connection_strings=self._build_connection_strings(env_vars),
+                host_ports=port_mappings,
             )
 
             # Step 11: Lifecycle hook + events
@@ -201,6 +208,7 @@ class PluginEngine:
                 env_var_keys=list(env_vars),
                 agent_tool_names=tool_names,
                 startup_order=definition.manifest.startup_order,
+                host_ports=port_mappings,
             )
 
             log.info("plugin_install_complete", tools=len(tools))

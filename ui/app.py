@@ -436,11 +436,18 @@ def page_sandbox_detail():
         st.error(f"**Sandbox failed:** {sb['error']}")
 
     # Quick Access URLs for web-accessible plugins (only those with actual browser UIs)
-    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "rabbitmq", "minio"}
+    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "rabbitmq", "minio", "neo4j"}
+    # Map plugin_id -> which container port has the web UI
+    WEB_UI_PORTS = {"neo4j": 7474}  # default is the primary host_port
     web_links = []
     for p in plugins:
-        hp = p.get("host_port")
         pid = p.get("plugin_id", "")
+        host_ports_map = p.get("host_ports", {})
+        # For plugins with a specific web UI port, use that mapping
+        if pid in WEB_UI_PORTS and host_ports_map:
+            hp = host_ports_map.get(str(WEB_UI_PORTS[pid])) or host_ports_map.get(WEB_UI_PORTS[pid])
+        else:
+            hp = p.get("host_port")
         if hp and pid in WEB_PLUGINS:
             url = f"http://localhost:{hp}"
             display_url = url
@@ -515,12 +522,23 @@ def page_sandbox_detail():
                 with cols[0]:
                     icon = CATEGORY_ICONS.get(p.get("category", ""), "📦")
                     host_port = p.get("host_port")
+                    host_ports_map = p.get("host_ports", {})
                     port_html = ""
-                    if host_port:
-                        # Determine protocol for clickable URL
-                        pid = p.get("plugin_id", "")
-                        if pid in ("jupyter", "grafana", "prometheus", "jaeger",
-                                   "rabbitmq", "minio"):
+                    pid = p.get("plugin_id", "")
+                    web_pids = ("jupyter", "grafana", "prometheus", "jaeger",
+                                "rabbitmq", "minio", "neo4j")
+                    if host_ports_map and len(host_ports_map) > 1:
+                        # Show all mapped ports
+                        parts = []
+                        for cport, hport in host_ports_map.items():
+                            if pid in web_pids:
+                                url = f"http://localhost:{hport}"
+                                parts.append(f'<a href="{url}" target="_blank">{cport}→{hport}</a>')
+                            else:
+                                parts.append(f"{cport}→{hport}")
+                        port_html = f'&nbsp;|&nbsp; Ports: <strong>{", ".join(parts)}</strong>'
+                    elif host_port:
+                        if pid in web_pids:
                             url = f"http://localhost:{host_port}"
                             port_html = f'&nbsp;|&nbsp; Access: <a href="{url}" target="_blank"><strong>{url}</strong></a>'
                         else:

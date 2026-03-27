@@ -29,6 +29,7 @@ class PluginInstanceRepo:
         env_var_keys: list[str],
         agent_tool_names: list[str],
         startup_order: int = 50,
+        host_ports: dict[int, int] | None = None,
     ) -> dict[str, Any]:
         instance = {
             "id": str(uuid4()),
@@ -41,6 +42,7 @@ class PluginInstanceRepo:
             "container_ip": container_ip,
             "internal_port": internal_port,
             "host_port": host_port,
+            "host_ports": host_ports or {},
             "config": config,
             "credentials_encrypted": credentials_encrypted,
             "env_var_keys": env_var_keys,
