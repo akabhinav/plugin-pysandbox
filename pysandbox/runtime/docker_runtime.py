@@ -262,6 +262,108 @@ class DockerRuntime:
 
         return await asyncio.to_thread(_remove)
 
+    async def list_managed_networks(self) -> list[dict]:
+        """List all pysandbox-managed Docker networks."""
+        def _list():
+            client = self._get_client()
+            networks = client.networks.list(filters={"label": "pysandbox.sandbox_id"})
+            result = []
+            for n in networks:
+                n.reload()
+                containers = n.attrs.get("Containers", {})
+                result.append({
+                    "id": n.id,
+                    "short_id": n.short_id,
+                    "name": n.name,
+                    "sandbox_id": n.attrs.get("Labels", {}).get("pysandbox.sandbox_id", ""),
+                    "containers": len(containers),
+                    "created": n.attrs.get("Created", ""),
+                })
+            return result
+
+        return await asyncio.to_thread(_list)
+
+    async def prune_managed_networks(self) -> list[str]:
+        """Remove all pysandbox networks that have no running containers."""
+        def _prune():
+            client = self._get_client()
+            networks = client.networks.list(filters={"label": "pysandbox.sandbox_id"})
+            removed = []
+            for n in networks:
+                try:
+                    n.reload()
+                    containers = n.attrs.get("Containers", {})
+                    if not containers:
+                        name = n.name
+                        n.remove()
+                        removed.append(name)
+                        logger.info("network_pruned", name=name)
+                except Exception as e:
+                    logger.warning("network_prune_failed", name=n.name, error=str(e))
+            return removed
+
+        return await asyncio.to_thread(_prune)
+
+    async def force_remove_networks(self, network_ids: list[str]) -> list[str]:
+        """Force disconnect all containers and remove networks. Returns removed names."""
+        def _remove():
+            client = self._get_client()
+            removed = []
+            for nid in network_ids:
+                try:
+                    network = client.networks.get(nid)
+                    # Disconnect all containers first
+                    network.reload()
+                    for cid in list(network.attrs.get("Containers", {}).keys()):
+                        try:
+                            network.disconnect(cid, force=True)
+                        except Exception:
+                            pass
+                    name = network.name
+                    network.remove()
+                    removed.append(name)
+                except Exception as e:
+                    logger.warning("network_force_remove_failed", id=nid[:12], error=str(e))
+            return removed
+
+        return await asyncio.to_thread(_remove)
+
+    async def full_cleanup(self) -> dict:
+        """Remove ALL pysandbox containers and networks. Returns summary."""
+        def _cleanup():
+            client = self._get_client()
+            result = {"containers_removed": 0, "networks_removed": 0}
+
+            # Remove all managed containers
+            containers = client.containers.list(
+                all=True, filters={"label": "pysandbox.managed=true"},
+            )
+            for c in containers:
+                try:
+                    c.remove(force=True)
+                    result["containers_removed"] += 1
+                except Exception:
+                    pass
+
+            # Remove all managed networks
+            networks = client.networks.list(filters={"label": "pysandbox.sandbox_id"})
+            for n in networks:
+                try:
+                    n.reload()
+                    for cid in list(n.attrs.get("Containers", {}).keys()):
+                        try:
+                            n.disconnect(cid, force=True)
+                        except Exception:
+                            pass
+                    n.remove()
+                    result["networks_removed"] += 1
+                except Exception:
+                    pass
+
+            return result
+
+        return await asyncio.to_thread(_cleanup)
+
     async def close(self) -> None:
         if self._client:
             self._client.close()

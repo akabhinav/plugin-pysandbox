@@ -1070,6 +1070,98 @@ def page_containers():
                 time.sleep(0.5)
                 st.rerun()
 
+    # ── Docker Networks ──
+    st.markdown("---")
+    st.markdown("## Docker Networks")
+    net_data = api("GET", "/v1/containers/networks")
+    networks = net_data.get("networks", []) if net_data else []
+
+    if networks:
+        net_cols = st.columns(3)
+        with net_cols[0]:
+            st.markdown(metric_card(len(networks), "Total Networks", "blue"), unsafe_allow_html=True)
+        with net_cols[1]:
+            empty_nets = sum(1 for n in networks if n["containers"] == 0)
+            st.markdown(metric_card(empty_nets, "Empty (orphaned)", "orange"), unsafe_allow_html=True)
+        with net_cols[2]:
+            active_nets = sum(1 for n in networks if n["containers"] > 0)
+            st.markdown(metric_card(active_nets, "Active", "green"), unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        for n in networks:
+            status_icon = "🟢" if n["containers"] > 0 else "🟡"
+            st.markdown(f"""
+            <div class="tool-card">
+                <span class="tool-name">{status_icon} {n['name']}</span>
+                <div class="tool-desc">
+                    Sandbox: <code>{n['sandbox_id'][:12]}</code>
+                    &nbsp;|&nbsp; Containers: <strong>{n['containers']}</strong>
+                    &nbsp;|&nbsp; ID: <code>{n['short_id']}</code>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        btn_cols = st.columns([1, 1, 1, 2])
+        with btn_cols[0]:
+            if st.button("🧹 Prune Empty Networks", use_container_width=True):
+                result = api("POST", "/v1/containers/networks/prune")
+                if result:
+                    st.toast(f"Pruned {result.get('count', 0)} empty network(s)", icon="🧹")
+                    time.sleep(0.5)
+                    st.rerun()
+        with btn_cols[1]:
+            if st.button("💣 Remove ALL Networks", use_container_width=True):
+                st.session_state["confirm_remove_networks"] = True
+        with btn_cols[2]:
+            if st.button("🔥 Full Cleanup (All)", use_container_width=True, type="primary"):
+                st.session_state["confirm_full_cleanup"] = True
+
+        if st.session_state.get("confirm_remove_networks"):
+            st.warning("This will **force disconnect containers** and remove ALL pysandbox networks.")
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                if st.button("Cancel##net", use_container_width=True):
+                    del st.session_state["confirm_remove_networks"]
+                    st.rerun()
+            with rc2:
+                if st.button("Yes, Remove All Networks", type="primary", use_container_width=True):
+                    all_net_ids = [n["id"] for n in networks]
+                    result = api("POST", "/v1/containers/networks/remove", json={"network_ids": all_net_ids})
+                    if result:
+                        st.toast(f"Removed {result.get('count', 0)} network(s)", icon="💣")
+                    del st.session_state["confirm_remove_networks"]
+                    time.sleep(0.5)
+                    st.rerun()
+
+        if st.session_state.get("confirm_full_cleanup"):
+            st.error("**DANGER**: This removes ALL pysandbox containers AND networks. All sandboxes will be destroyed.")
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                if st.button("Cancel##full", use_container_width=True):
+                    del st.session_state["confirm_full_cleanup"]
+                    st.rerun()
+            with rc2:
+                if st.button("Yes, Destroy Everything", type="primary", use_container_width=True):
+                    result = api("POST", "/v1/containers/cleanup")
+                    if result:
+                        st.toast(
+                            f"Removed {result.get('containers_removed', 0)} containers, "
+                            f"{result.get('networks_removed', 0)} networks",
+                            icon="🔥",
+                        )
+                    del st.session_state["confirm_full_cleanup"]
+                    time.sleep(0.5)
+                    st.rerun()
+    else:
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-icon">🌐</div>
+            <div class="empty-text">No PySandbox networks found</div>
+        </div>
+        """, unsafe_allow_html=True)
+
 
 # ── Main App ────────────────────────────────────────────────────────────────
 
