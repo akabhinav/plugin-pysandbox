@@ -18,8 +18,8 @@ ports:
     protocol: tcp
     name: arrow-flight
 resources:
-  cpu: "2.0"
-  memory: "4096m"
+  cpu: "1.0"
+  memory: "2048m"
   disk_gb: 10.0
 health_check:
   type: http

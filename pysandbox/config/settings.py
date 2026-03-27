@@ -34,9 +34,9 @@ class Settings(BaseSettings):
     SECRET_ENCRYPTION_KEY: SecretStr = SecretStr("")
 
     # Resource defaults per sandbox
-    DEFAULT_SANDBOX_CPU_LIMIT: float = 4.0
-    DEFAULT_SANDBOX_MEMORY_LIMIT_GB: float = 8.0
-    DEFAULT_SANDBOX_DISK_LIMIT_GB: float = 50.0
+    DEFAULT_SANDBOX_CPU_LIMIT: float = 16.0
+    DEFAULT_SANDBOX_MEMORY_LIMIT_GB: float = 32.0
+    DEFAULT_SANDBOX_DISK_LIMIT_GB: float = 100.0
     MAX_PLUGINS_PER_SANDBOX: int = 20
     PLUGIN_HEALTH_TIMEOUT_SECONDS: int = 120
 
