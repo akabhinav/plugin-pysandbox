@@ -74,6 +74,10 @@ def inject_css():
     .badge-destroyed { background: #f8d7da; color: #721c24; }
     .badge-healthy { background: #d4edda; color: #155724; }
     .badge-unhealthy { background: #f8d7da; color: #721c24; }
+    .badge-error { background: #f8d7da; color: #721c24; }
+    .badge-creating { background: #cce5ff; color: #004085; }
+    .badge-resuming { background: #cce5ff; color: #004085; }
+    .badge-destroying { background: #fff3cd; color: #856404; }
 
     /* Sandbox cards */
     .sandbox-card {
@@ -163,6 +167,7 @@ CATEGORY_ICONS = {
 
 STATUS_ICONS = {
     "running": "🟢", "paused": "🟡", "destroyed": "🔴",
+    "error": "🔴", "creating": "🔵", "resuming": "🔵", "destroying": "🟡",
     "healthy": "🟢", "unhealthy": "🔴",
 }
 
@@ -280,6 +285,12 @@ def page_dashboard():
                     if st.button("▶️ Resume", key=f"resume_{sb['id']}", use_container_width=True):
                         api("POST", f"/v1/sandboxes/{sb['id']}/resume")
                         st.toast(f"Resumed {sb['name']}", icon="▶️")
+                        time.sleep(0.5)
+                        st.rerun()
+                elif status == "error":
+                    if st.button("🗑️ Destroy", key=f"destroy_{sb['id']}", use_container_width=True):
+                        api("DELETE", f"/v1/sandboxes/{sb['id']}")
+                        st.toast(f"Destroyed {sb['name']}", icon="🗑️")
                         time.sleep(0.5)
                         st.rerun()
 
