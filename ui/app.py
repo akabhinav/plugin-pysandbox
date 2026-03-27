@@ -435,9 +435,8 @@ def page_sandbox_detail():
     if status == "error" and sb.get("error"):
         st.error(f"**Sandbox failed:** {sb['error']}")
 
-    # Quick Access URLs for web-accessible plugins
-    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "elasticsearch",
-                   "localstack", "minio", "vault", "rabbitmq", "clickhouse"}
+    # Quick Access URLs for web-accessible plugins (only those with actual browser UIs)
+    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "rabbitmq", "minio"}
     web_links = []
     for p in plugins:
         hp = p.get("host_port")
@@ -522,8 +521,8 @@ def page_sandbox_detail():
                     if host_port:
                         # Determine protocol for clickable URL
                         pid = p.get("plugin_id", "")
-                        if pid in ("jupyter", "grafana", "prometheus", "jaeger", "elasticsearch",
-                                   "localstack", "minio", "vault", "rabbitmq", "clickhouse"):
+                        if pid in ("jupyter", "grafana", "prometheus", "jaeger",
+                                   "rabbitmq", "minio"):
                             url = f"http://localhost:{host_port}"
                             port_html = f'&nbsp;|&nbsp; Access: <a href="{url}" target="_blank"><strong>{url}</strong></a>'
                         else:
