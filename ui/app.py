@@ -438,7 +438,13 @@ def page_sandbox_detail():
     # Quick Access URLs for web-accessible plugins (only those with actual browser UIs)
     WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "rabbitmq", "minio", "neo4j", "dremio", "spark"}
     # Map plugin_id -> which container port has the web UI
-    WEB_UI_PORTS = {"neo4j": 7474, "dremio": 9047, "spark": 8080}  # default is the primary host_port
+    WEB_UI_PORTS = {
+        "minio": 9001,       # Console UI on 9001, not API on 9000
+        "rabbitmq": 15672,   # Management UI on 15672, not AMQP on 5672
+        "neo4j": 7474,
+        "dremio": 9047,
+        "spark": 8080,
+    }
     web_links = []
     for p in plugins:
         pid = p.get("plugin_id", "")
@@ -1001,7 +1007,14 @@ def page_containers():
         short_id = c.get("short_id", cid[:12])
         status = c["status"]
         status_icon = "🟢" if status == "running" else "🔴" if status == "exited" else "🟡"
-        port_info = f" | Port: **{c['host_port']}**" if c.get("host_port") else ""
+        host_ports_map = c.get("host_ports", {})
+        if host_ports_map:
+            ports_str = ", ".join(f"{cp}→{hp}" for cp, hp in host_ports_map.items())
+            port_info = f" | Ports: **{ports_str}**"
+        elif c.get("host_port"):
+            port_info = f" | Port: **{c['host_port']}**"
+        else:
+            port_info = ""
 
         col_check, col_info = st.columns([0.5, 5])
         with col_check:

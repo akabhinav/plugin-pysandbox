@@ -222,10 +222,16 @@ class DockerRuntime:
             for c in containers:
                 ports = c.attrs.get("NetworkSettings", {}).get("Ports", {})
                 host_port = None
-                for port_info in ports.values():
+                host_ports = {}
+                for port_key, port_info in ports.items():
                     if port_info:
-                        host_port = port_info[0].get("HostPort")
-                        break
+                        hp = port_info[0].get("HostPort")
+                        if hp:
+                            # Extract container port number from "9000/tcp"
+                            cport = port_key.split("/")[0]
+                            host_ports[cport] = hp
+                            if host_port is None:
+                                host_port = hp
                 result.append({
                     "id": c.id,
                     "short_id": c.short_id,
@@ -233,6 +239,7 @@ class DockerRuntime:
                     "image": c.image.tags[0] if c.image.tags else str(c.image.id)[:20],
                     "status": c.status,
                     "host_port": host_port,
+                    "host_ports": host_ports,
                     "created": c.attrs.get("Created", ""),
                 })
             return result
