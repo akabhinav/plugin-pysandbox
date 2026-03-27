@@ -33,6 +33,7 @@ class LocalStackPlugin(PluginDefinition):
                 "DEFAULT_REGION": config.get("region", "us-east-1"),
                 "AWS_DEFAULT_REGION": config.get("region", "us-east-1"),
                 "DEBUG": "0",
+                "LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT": "1",
             },
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/var/lib/localstack", "mode": "rw"},
