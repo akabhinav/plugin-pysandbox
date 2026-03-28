@@ -21,9 +21,9 @@ resources:
 health_check:
   type: tcp
   port: 9092
-  interval_seconds: 10
+  interval_seconds: 5
   timeout_seconds: 10
-  retries: 24
+  retries: 40
 config_params: []
 depends_on: []
 startup_order: 60

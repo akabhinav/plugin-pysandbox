@@ -24,11 +24,11 @@ class KafkaPlugin(PluginDefinition):
                 "KAFKA_ADVERTISED_LISTENERS": f"PLAINTEXT://{plugin_name}.{dns_zone}:9092",
             },
             "healthcheck": {
-                "test": ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"],
-                "interval": 10_000_000_000,
+                "test": ["CMD-SHELL", "nc -z localhost 9092 || exit 1"],
+                "interval": 5_000_000_000,
                 "timeout": 5_000_000_000,
-                "retries": 40,
-                "start_period": 30_000_000_000,
+                "retries": 30,
+                "start_period": 40_000_000_000,
             },
         }
 
