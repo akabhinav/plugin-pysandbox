@@ -213,7 +213,7 @@ PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
     "minio": [
         {
             "name": "List buckets",
-            "tool": "s3_list",
+            "tool": "s3_list_buckets",
             "params": {},
             "validate": _no_error,
         },
@@ -340,7 +340,7 @@ CROSS_PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "MinIO → verify storage ready",
             "plugin": "minio",
-            "tool": "s3_list",
+            "tool": "s3_list_buckets",
             "params": {},
             "validate": _no_error,
         },
@@ -356,7 +356,7 @@ CROSS_PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "MinIO → verify object storage",
             "plugin": "minio",
-            "tool": "s3_list",
+            "tool": "s3_list_buckets",
             "params": {},
             "validate": _no_error,
         },

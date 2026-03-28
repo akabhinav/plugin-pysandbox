@@ -38,11 +38,16 @@ class TestTTLAPI:
         client.post("/v1/ttl/sb1", json={"ttl_seconds": 3600})
         resp = client.get("/v1/ttl/sb1")
         assert resp.status_code == 200
-        assert resp.json()["remaining_seconds"] > 0
+        data = resp.json()
+        assert data["active"] is True
+        assert data["remaining_seconds"] > 0
 
-    def test_get_ttl_not_found(self, client):
+    def test_get_ttl_not_set(self, client):
         resp = client.get("/v1/ttl/sb999")
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["active"] is False
+        assert data["remaining_seconds"] is None
 
     def test_set_ttl_too_short(self, client):
         resp = client.post("/v1/ttl/sb1", json={"ttl_seconds": 30})

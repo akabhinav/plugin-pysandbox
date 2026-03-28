@@ -37,9 +37,10 @@ class TestLocalStackPlugin:
         plugin = get_plugin("localstack")
         tools = plugin.get_agent_tools("aws", "abc.sandbox.local", {}, {})
 
-        assert len(tools) == 16
+        assert len(tools) == 17
         names = {t.name for t in tools}
         assert "s3_upload" in names
+        assert "s3_list_buckets" in names
         assert "sqs_send" in names
         assert "dynamodb_put" in names
         assert "lambda_invoke" in names

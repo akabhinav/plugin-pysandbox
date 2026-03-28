@@ -69,19 +69,13 @@ async def get_sandbox_quickstart(sandbox_id: str, request: Request):
 
     template_id = sandbox.get("tags", {}).get("template")
     if not template_id:
-        raise HTTPException(
-            status_code=404,
-            detail="No quickstart available — sandbox was not created from a template",
-        )
+        return {"available": False, "reason": "Sandbox was not created from a template"}
 
     qs = get_quickstart(template_id)
     if not qs:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No quickstart defined for template '{template_id}'",
-        )
+        return {"available": False, "reason": f"No quickstart defined for template '{template_id}'"}
 
-    return qs.to_dict()
+    return {**qs.to_dict(), "available": True}
 
 
 # ── Non-sandbox-scoped endpoints ─────────────────────────────────────────────

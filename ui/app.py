@@ -536,7 +536,7 @@ def page_sandbox_detail():
                     st.rerun()
         with dev_c3:
             qs_data = api("GET", f"/v1/sandboxes/{sandbox_id}/quickstart")
-            if qs_data and "steps" in qs_data:
+            if qs_data and qs_data.get("available") and "steps" in qs_data:
                 st.markdown(f"**📖 Quickstart available** — {qs_data.get('title', 'Guide')}")
             else:
                 st.markdown("*No quickstart for this sandbox*")
@@ -1009,7 +1009,7 @@ def page_sandbox_detail():
     # ── Quickstart Tab ──
     with tab_quickstart:
         qs = api("GET", f"/v1/sandboxes/{sandbox_id}/quickstart")
-        if qs and "steps" in qs:
+        if qs and qs.get("available") and "steps" in qs:
             st.markdown(f'<div class="section-header">{qs["title"]}</div>', unsafe_allow_html=True)
             st.markdown(f'*{qs["description"]}*  —  **~{qs["estimated_minutes"]} min**')
             st.markdown("---")
@@ -1116,7 +1116,7 @@ def page_sandbox_detail():
         # TTL Management
         st.markdown("#### ⏰ Time-to-Live (Auto-Destroy)")
         ttl_data = api("GET", f"/v1/ttl/{sandbox_id}")
-        if ttl_data and "remaining_seconds" in ttl_data:
+        if ttl_data and ttl_data.get("active") and ttl_data.get("remaining_seconds") is not None:
             remaining = ttl_data["remaining_seconds"]
             hours = remaining // 3600
             mins = (remaining % 3600) // 60

@@ -23,6 +23,7 @@ def tool_registry():
         "kafka_delete_topic": "OK",
         "kafka_consume": "message",
         "s3_list": "buckets: []",
+        "s3_list_buckets": "2024-01-15 10:00:00 test-bucket",
         "nessie_list_branches": "main",
         "es_cluster_health": "green",
         "clickhouse_query": "1\nsearch_verify",

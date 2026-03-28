@@ -368,7 +368,9 @@ class TestMinIODetails:
         plugin = get_plugin("minio")
         creds = {"access_key": "ak", "secret_key": "sk"}
         tools = plugin.get_agent_tools("minio", "z.sandbox.local", creds, {})
-        assert len(tools) == 5
+        assert len(tools) == 6
+        tool_names = {t.name for t in tools}
+        assert "s3_list_buckets" in tool_names
 
     def test_init_creates_buckets(self):
         plugin = get_plugin("minio")

@@ -6,12 +6,14 @@ from typing import Any
 from pysandbox.agent.tools.s3_tools import (
     DYNAMO_GET_SCHEMA, DYNAMO_PUT_SCHEMA, DYNAMO_QUERY_SCHEMA,
     LAMBDA_INVOKE_SCHEMA, S3_DELETE_SCHEMA, S3_DOWNLOAD_SCHEMA,
-    S3_LIST_SCHEMA, S3_PRESIGN_SCHEMA, S3_UPLOAD_SCHEMA,
+    S3_LIST_BUCKETS_SCHEMA, S3_LIST_SCHEMA, S3_PRESIGN_SCHEMA,
+    S3_UPLOAD_SCHEMA,
     SM_GET_SCHEMA, SM_PUT_SCHEMA, SNS_CREATE_SCHEMA, SNS_PUB_SCHEMA,
     SQS_CREATE_SCHEMA, SQS_RECV_SCHEMA, SQS_SEND_SCHEMA,
     make_dynamo_get, make_dynamo_put, make_dynamo_query,
     make_lambda_invoke, make_s3_delete, make_s3_download, make_s3_list,
-    make_s3_presign, make_s3_upload, make_sm_get, make_sm_put,
+    make_s3_list_buckets, make_s3_presign, make_s3_upload,
+    make_sm_get, make_sm_put,
     make_sns_create, make_sns_publish, make_sqs_create, make_sqs_receive,
     make_sqs_send,
 )
@@ -72,7 +74,8 @@ class LocalStackPlugin(PluginDefinition):
         return [
             AgentTool("s3_upload", "Upload to S3", S3_UPLOAD_SCHEMA, make_s3_upload(*args)),
             AgentTool("s3_download", "Download from S3", S3_DOWNLOAD_SCHEMA, make_s3_download(*args)),
-            AgentTool("s3_list", "List S3 objects", S3_LIST_SCHEMA, make_s3_list(*args)),
+            AgentTool("s3_list", "List S3 objects in a bucket", S3_LIST_SCHEMA, make_s3_list(*args)),
+            AgentTool("s3_list_buckets", "List all S3 buckets", S3_LIST_BUCKETS_SCHEMA, make_s3_list_buckets(*args)),
             AgentTool("s3_delete", "Delete S3 object", S3_DELETE_SCHEMA, make_s3_delete(*args)),
             AgentTool("s3_presign", "Generate presigned URL", S3_PRESIGN_SCHEMA, make_s3_presign(*args)),
             AgentTool("sqs_send", "Send SQS message", SQS_SEND_SCHEMA, make_sqs_send(*args)),

@@ -4,9 +4,10 @@ import secrets
 from typing import Any
 
 from pysandbox.agent.tools.s3_tools import (
-    S3_DELETE_SCHEMA, S3_DOWNLOAD_SCHEMA, S3_LIST_SCHEMA,
+    S3_DELETE_SCHEMA, S3_DOWNLOAD_SCHEMA, S3_LIST_BUCKETS_SCHEMA, S3_LIST_SCHEMA,
     S3_PRESIGN_SCHEMA, S3_UPLOAD_SCHEMA,
-    make_s3_delete, make_s3_download, make_s3_list, make_s3_presign, make_s3_upload,
+    make_s3_delete, make_s3_download, make_s3_list, make_s3_list_buckets,
+    make_s3_presign, make_s3_upload,
 )
 from pysandbox.plugin.base import AgentTool, PluginDefinition
 from pysandbox.plugin.registry import register_plugin
@@ -59,7 +60,8 @@ class MinIOPlugin(PluginDefinition):
         return [
             AgentTool("s3_upload", "Upload to S3/MinIO", S3_UPLOAD_SCHEMA, make_s3_upload(*args)),
             AgentTool("s3_download", "Download from S3/MinIO", S3_DOWNLOAD_SCHEMA, make_s3_download(*args)),
-            AgentTool("s3_list", "List objects", S3_LIST_SCHEMA, make_s3_list(*args)),
+            AgentTool("s3_list", "List objects in a bucket", S3_LIST_SCHEMA, make_s3_list(*args)),
+            AgentTool("s3_list_buckets", "List all buckets", S3_LIST_BUCKETS_SCHEMA, make_s3_list_buckets(*args)),
             AgentTool("s3_delete", "Delete object", S3_DELETE_SCHEMA, make_s3_delete(*args)),
             AgentTool("s3_presign", "Generate presigned URL", S3_PRESIGN_SCHEMA, make_s3_presign(*args)),
         ]

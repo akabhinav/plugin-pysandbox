@@ -105,6 +105,7 @@ class TestQuickstartAPI:
         resp = client.get("/v1/sandboxes/sb1/quickstart")
         assert resp.status_code == 200
         data = resp.json()
+        assert data["available"] is True
         assert data["template_id"] == "microservices"
         assert data["total_steps"] > 0
 
@@ -113,7 +114,8 @@ class TestQuickstartAPI:
             "id": "sb1", "status": "running", "tags": {},
         })
         resp = client.get("/v1/sandboxes/sb1/quickstart")
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert resp.json()["available"] is False
 
     def test_list_quickstarts(self, client):
         resp = client.get("/v1/quickstarts")

@@ -29,6 +29,11 @@ S3_LIST_SCHEMA = {
     "required": ["bucket"],
 }
 
+S3_LIST_BUCKETS_SCHEMA = {
+    "type": "object",
+    "properties": {},
+}
+
 S3_DELETE_SCHEMA = {
     "type": "object",
     "properties": {"bucket": {"type": "string"}, "key": {"type": "string"}},
@@ -171,6 +176,14 @@ def make_s3_download(container_id: str, docker_runtime, endpoint_url: str, acces
         bucket = params["bucket"]
         key = params["key"]
         cmd = f"{env} aws s3 cp s3://{bucket}/{key} - --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+def make_s3_list_buckets(container_id: str, docker_runtime, endpoint_url: str, access_key: str, secret_key: str, region: str = "us-east-1"):
+    async def handler(params: dict) -> str:
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws s3 ls --endpoint-url {endpoint_url}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
 

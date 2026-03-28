@@ -22,12 +22,12 @@ async def list_ttls(request: Request):
 
 @router.get("/{sandbox_id}")
 async def get_ttl(sandbox_id: str, request: Request):
-    """Get TTL info for a sandbox."""
+    """Get TTL info for a sandbox. Returns null fields if no TTL is set."""
     ttl_manager = request.app.state.ttl_manager
     info = ttl_manager.get_ttl(sandbox_id)
     if not info:
-        raise HTTPException(status_code=404, detail="No TTL set for this sandbox")
-    return info
+        return {"sandbox_id": sandbox_id, "active": False, "ttl_seconds": None, "remaining_seconds": None, "expires_at": None}
+    return {**info, "active": True}
 
 
 @router.post("/{sandbox_id}")
