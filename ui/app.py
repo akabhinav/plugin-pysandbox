@@ -469,17 +469,29 @@ def page_sandbox_detail():
     if status == "error" and sb.get("error"):
         st.error(f"**Sandbox failed:** {sb['error']}")
 
-    # Quick Access URLs for web-accessible plugins (only those with actual browser UIs)
-    WEB_PLUGINS = {"jupyter", "grafana", "prometheus", "jaeger", "rabbitmq", "minio", "neo4j", "dremio", "spark", "clickhouse", "nessie"}
+    # Quick Access URLs for web-accessible plugins (all that have browser UIs)
+    WEB_PLUGINS = {
+        "jupyter", "grafana", "prometheus", "jaeger", "rabbitmq",
+        "minio", "neo4j", "dremio", "spark", "clickhouse", "nessie",
+        "elasticsearch", "vault", "nats",
+    }
     # Map plugin_id -> which container port has the web UI
+    # Explicit for ALL web plugins to avoid accidentally linking the wrong port
     WEB_UI_PORTS = {
-        "minio": 9001,       # Console UI on 9001, not API on 9000
+        "jupyter": 8888,
+        "grafana": 3000,
+        "prometheus": 9090,
+        "jaeger": 16686,     # UI on 16686, not collector on 14268
         "rabbitmq": 15672,   # Management UI on 15672, not AMQP on 5672
-        "neo4j": 7474,
+        "minio": 9001,       # Console UI on 9001, not S3 API on 9000
+        "neo4j": 7474,       # Browser UI on 7474, not Bolt on 7687
         "dremio": 9047,
-        "spark": 8080,
-        "clickhouse": 8123,  # Play UI on 8123, not native on 9000
-        "nessie": 19120,     # Nessie REST API (browsable)
+        "spark": 8080,       # Master UI on 8080
+        "clickhouse": 8123,  # HTTP Play UI on 8123, not native on 9000
+        "nessie": 19120,     # REST API (browsable)
+        "elasticsearch": 9200,  # REST API (browsable: /_cat/, /_cluster/health)
+        "vault": 8200,       # Web UI at /ui/
+        "nats": 8222,        # Monitoring dashboard on 8222, not client on 4222
     }
     web_links = []
     for p in plugins:
@@ -499,22 +511,32 @@ def page_sandbox_detail():
                     token = env_data["env"].get("JUPYTER_TOKEN", "")
                     if token and token != "***":
                         display_url = f"{url}?token={token}"
+            elif pid == "vault":
+                display_url = f"{url}/ui/"
+            elif pid == "elasticsearch":
+                display_url = f"{url}/_cat/"
+            elif pid == "nats":
+                display_url = f"{url}/varz"
             web_links.append((p.get("plugin_name", pid), display_url, pid))
 
     if web_links:
         st.markdown('<div class="section-header">Quick Access</div>', unsafe_allow_html=True)
-        link_cols = st.columns(len(web_links))
-        for i, (name, url, pid) in enumerate(web_links):
-            with link_cols[i]:
-                st.markdown(f"""
-                <a href="{url}" target="_blank" style="
-                    display:block; text-align:center; padding:12px 16px;
-                    background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color:white; border-radius:10px; text-decoration:none;
-                    font-weight:700; font-size:0.9rem;
-                    box-shadow: 0 4px 12px rgba(102,126,234,0.3);
-                ">🔗 Open {name}</a>
-                """, unsafe_allow_html=True)
+        # Chunk into rows of 4 to avoid too-narrow columns
+        cols_per_row = min(4, len(web_links))
+        for row_start in range(0, len(web_links), cols_per_row):
+            row_items = web_links[row_start:row_start + cols_per_row]
+            link_cols = st.columns(cols_per_row)
+            for i, (name, url, pid) in enumerate(row_items):
+                with link_cols[i]:
+                    st.markdown(f"""
+                    <a href="{url}" target="_blank" style="
+                        display:block; text-align:center; padding:12px 16px;
+                        background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        color:white; border-radius:10px; text-decoration:none;
+                        font-weight:700; font-size:0.9rem;
+                        box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+                    ">🔗 Open {name}</a>
+                    """, unsafe_allow_html=True)
 
     # ── Verify / Seed / Quickstart Action Bar ──
     if status == "running":
@@ -632,25 +654,23 @@ def page_sandbox_detail():
                     host_ports_map = p.get("host_ports", {})
                     port_html = ""
                     pid = p.get("plugin_id", "")
-                    web_pids = ("jupyter", "grafana", "prometheus", "jaeger",
-                                "rabbitmq", "minio", "neo4j", "dremio", "spark",
-                                "clickhouse", "nessie")
+                    web_pids = WEB_PLUGINS
                     if host_ports_map and len(host_ports_map) > 1:
-                        # Show all mapped ports
+                        # Show all mapped ports with links for web-accessible ports
                         parts = []
                         for cport, hport in host_ports_map.items():
                             if pid in web_pids:
                                 url = f"http://localhost:{hport}"
                                 parts.append(f'<a href="{url}" target="_blank">{cport}→{hport}</a>')
                             else:
-                                parts.append(f"{cport}→{hport}")
+                                parts.append(f"{cport}→<code>localhost:{hport}</code>")
                         port_html = f'&nbsp;|&nbsp; Ports: <strong>{", ".join(parts)}</strong>'
                     elif host_port:
                         if pid in web_pids:
                             url = f"http://localhost:{host_port}"
                             port_html = f'&nbsp;|&nbsp; Access: <a href="{url}" target="_blank"><strong>{url}</strong></a>'
                         else:
-                            port_html = f'&nbsp;|&nbsp; Host Port: <strong>{host_port}</strong>'
+                            port_html = f'&nbsp;|&nbsp; Connect: <code>localhost:{host_port}</code>'
                     st.markdown(f"""
                     <div class="tool-card">
                         <span class="tool-name">{icon} {p.get('plugin_name', p.get('name', '?'))}</span>
