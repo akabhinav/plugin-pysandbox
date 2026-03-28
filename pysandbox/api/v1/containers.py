@@ -58,7 +58,22 @@ async def remove_networks(req: RemoveNetworksRequest, request: Request):
 
 @router.post("/cleanup")
 async def full_cleanup(request: Request):
-    """Remove ALL pysandbox containers and networks. Nuclear option."""
+    """Remove ALL pysandbox containers, volumes, and networks. Nuclear option.
+
+    Also marks every sandbox as 'destroyed' in the repo so the dashboard
+    reflects the actual state.
+    """
     docker = request.app.state.docker_runtime
     result = await docker.full_cleanup()
+
+    # Mark all sandboxes as destroyed in the repo
+    engine = request.app.state.sandbox_engine
+    all_sandboxes = await engine.list_all()
+    destroyed_count = 0
+    for sb in all_sandboxes:
+        if sb.get("status") not in ("destroyed",):
+            await engine._repo.update_status(sb["id"], "destroyed")
+            destroyed_count += 1
+    result["sandboxes_marked_destroyed"] = destroyed_count
+
     return result

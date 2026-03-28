@@ -183,7 +183,11 @@ class SandboxEngine:
         log.info("sandbox_resumed")
 
     async def destroy(self, sandbox_id: str) -> None:
-        """Remove all plugins, stop DNS, destroy network. Irreversible."""
+        """Remove all plugins, stop DNS, destroy network. Irreversible.
+
+        Tolerates missing Docker resources (e.g. from a failed create).
+        Always marks the sandbox as destroyed regardless of cleanup errors.
+        """
         log = logger.bind(sandbox_id=sandbox_id)
         log.info("sandbox_destroy_start")
         await self._repo.update_status(sandbox_id, SandboxState.DESTROYING.value)
@@ -216,7 +220,10 @@ class SandboxEngine:
         # Remove network (force-disconnects remaining containers)
         sandbox = await self._repo.get(sandbox_id)
         if sandbox:
-            await self._docker.remove_network(sandbox["docker_network"])
+            try:
+                await self._docker.remove_network(sandbox["docker_network"])
+            except Exception:
+                log.warning("network_remove_failed_on_destroy")
 
         self._resources.remove_sandbox(sandbox_id)
         await self._repo.update_status(sandbox_id, SandboxState.DESTROYED.value)
