@@ -256,6 +256,11 @@ class PluginEngine:
             await self._docker.stop(container_id)
             await self._docker.remove(container_id, force=True)
 
+        # Remove data volume
+        short_id = sandbox_id[:8]
+        volume_name = f"pysb-{short_id}-{plugin_name}"
+        await self._docker.remove_volume(volume_name)
+
         # Release resources
         self._resources.release(sandbox_id, definition.manifest)
 

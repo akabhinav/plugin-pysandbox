@@ -35,6 +35,7 @@ class PostgresPlugin(PluginDefinition):
                 "POSTGRES_USER": credentials["user"],
                 "POSTGRES_PASSWORD": credentials["password"],
                 "POSTGRES_INITDB_ARGS": "--encoding=UTF-8",
+                "PGDATA": "/var/lib/postgresql/data/pgdata",
             },
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {
@@ -50,8 +51,8 @@ class PostgresPlugin(PluginDefinition):
             "healthcheck": {
                 "test": ["CMD-SHELL", f"pg_isready -U {credentials['user']} -d {credentials['database']}"],
                 "interval": 5_000_000_000,
-                "timeout": 3_000_000_000,
-                "retries": 10,
+                "timeout": 5_000_000_000,
+                "retries": 20,
                 "start_period": 30_000_000_000,
             },
         }

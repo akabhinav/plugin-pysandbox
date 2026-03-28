@@ -209,6 +209,19 @@ class DockerRuntime:
 
         await asyncio.to_thread(_remove)
 
+    async def remove_volume(self, volume_name: str) -> None:
+        """Remove a Docker volume by name. Best-effort."""
+        def _remove():
+            client = self._get_client()
+            try:
+                vol = client.volumes.get(volume_name)
+                vol.remove(force=True)
+                logger.info("volume_removed", name=volume_name)
+            except Exception:
+                pass  # Volume may not exist
+
+        await asyncio.to_thread(_remove)
+
     async def exec_in_container(self, container_id: str, command: str) -> str:
         """Run a shell command inside a container. Returns stdout."""
         def _exec():
@@ -446,10 +459,10 @@ class DockerRuntime:
         return await asyncio.to_thread(_remove)
 
     async def full_cleanup(self) -> dict:
-        """Remove ALL pysandbox containers and networks. Returns summary."""
+        """Remove ALL pysandbox containers, volumes, and networks. Returns summary."""
         def _cleanup():
             client = self._get_client()
-            result = {"containers_removed": 0, "networks_removed": 0}
+            result = {"containers_removed": 0, "networks_removed": 0, "volumes_removed": 0}
 
             # Remove all managed containers
             containers = client.containers.list(
@@ -461,6 +474,15 @@ class DockerRuntime:
                     result["containers_removed"] += 1
                 except Exception:
                     pass
+
+            # Remove all pysandbox volumes (named pysb-*)
+            for vol in client.volumes.list():
+                if vol.name.startswith("pysb-"):
+                    try:
+                        vol.remove(force=True)
+                        result["volumes_removed"] += 1
+                    except Exception:
+                        pass
 
             # Remove all managed networks
             networks = client.networks.list(filters={"label": "pysandbox.sandbox_id"})

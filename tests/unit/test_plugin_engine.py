@@ -32,6 +32,7 @@ def mock_docker():
     docker.exec_in_container = AsyncMock(return_value="ok")
     docker.stop = AsyncMock()
     docker.remove = AsyncMock()
+    docker.remove_volume = AsyncMock()
     return docker
 
 
