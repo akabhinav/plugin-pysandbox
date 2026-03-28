@@ -1,6 +1,7 @@
 """Tests for the Timeline API endpoints."""
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from pysandbox.engine.activity_timeline import ActivityTimeline
@@ -16,6 +17,12 @@ def app():
     tl.record("sb1", "plugin.installed", "Installed postgres", plugin_name="postgres")
     tl.record("sb1", "plugin.installed", "Installed redis", plugin_name="redis")
     app.state.activity_timeline = tl
+
+    engine = MagicMock()
+    engine.get = AsyncMock(return_value={
+        "id": "sb1", "name": "test", "status": "running",
+    })
+    app.state.sandbox_engine = engine
     return app
 
 
@@ -38,9 +45,15 @@ class TestTimelineAPI:
         assert len(data["entries"]) == 1
 
     def test_get_timeline_empty(self, client):
-        resp = client.get("/v1/timeline/sb999")
+        # sb1 exists (mocked) but has no timeline entries for this query
+        resp = client.get("/v1/timeline/sb1?event_type=nonexistent.event")
         assert resp.status_code == 200
-        assert resp.json()["total"] == 0
+        assert len(resp.json()["entries"]) == 0
+
+    def test_get_timeline_sandbox_not_found(self, client, app):
+        app.state.sandbox_engine.get = AsyncMock(return_value=None)
+        resp = client.get("/v1/timeline/sb999")
+        assert resp.status_code == 404
 
     def test_add_entry(self, client):
         resp = client.post("/v1/timeline/sb1", json={

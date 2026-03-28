@@ -39,6 +39,12 @@ def app():
         },
     ])
     app.state.plugin_instance_repo = repo
+
+    engine = MagicMock()
+    engine.get = AsyncMock(return_value={
+        "id": "sb1", "name": "test", "status": "running",
+    })
+    app.state.sandbox_engine = engine
     return app
 
 

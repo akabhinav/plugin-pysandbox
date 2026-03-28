@@ -87,19 +87,52 @@ class SandboxTTLManager:
 
     async def _check_loop(self) -> None:
         """Periodically check for expired sandboxes."""
+        # Track retry counts per sandbox: sandbox_id → attempt_count
+        retry_counts: dict[str, int] = {}
+        max_retries = 3
+
         while True:
             try:
                 await asyncio.sleep(30)  # Check every 30 seconds
                 expired = self.get_expired()
                 for sid in expired:
-                    logger.info("ttl_expired_destroying", sandbox_id=sid)
+                    attempt = retry_counts.get(sid, 0) + 1
+                    logger.info("ttl_expired_destroying", sandbox_id=sid, attempt=attempt)
                     try:
                         if self._engine:
+                            # Check if sandbox still exists and isn't already destroyed
+                            sandbox = await self._engine.get(sid)
+                            if not sandbox or sandbox.get("status") == "destroyed":
+                                # Already gone, just clean up TTL entry
+                                self._ttls.pop(sid, None)
+                                retry_counts.pop(sid, None)
+                                logger.info("ttl_sandbox_already_destroyed", sandbox_id=sid)
+                                continue
                             await self._engine.destroy(sid)
+                        # Only remove TTL entry after successful destroy
                         self._ttls.pop(sid, None)
+                        retry_counts.pop(sid, None)
                         logger.info("ttl_sandbox_destroyed", sandbox_id=sid)
                     except Exception as e:
-                        logger.error("ttl_destroy_failed", sandbox_id=sid, error=str(e))
+                        retry_counts[sid] = attempt
+                        if attempt >= max_retries:
+                            logger.error(
+                                "ttl_destroy_max_retries",
+                                sandbox_id=sid,
+                                attempts=attempt,
+                                error=str(e),
+                            )
+                            # Remove TTL to stop retrying, but don't mark as destroyed
+                            self._ttls.pop(sid, None)
+                            retry_counts.pop(sid, None)
+                        else:
+                            logger.warning(
+                                "ttl_destroy_failed_will_retry",
+                                sandbox_id=sid,
+                                attempt=attempt,
+                                max_retries=max_retries,
+                                error=str(e),
+                            )
             except asyncio.CancelledError:
                 break
             except Exception:

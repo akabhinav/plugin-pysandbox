@@ -38,6 +38,13 @@ async def batch_pause(req: BatchPauseRequest, request: Request):
     results = {"succeeded": [], "failed": []}
     for sid in req.sandbox_ids:
         try:
+            sandbox = await engine.get(sid)
+            if not sandbox:
+                results["failed"].append({"sandbox_id": sid, "error": "Not found"})
+                continue
+            if sandbox.get("status") != "running":
+                results["failed"].append({"sandbox_id": sid, "error": f"Cannot pause: status is '{sandbox.get('status')}'"})
+                continue
             await engine.pause(sid)
             results["succeeded"].append(sid)
         except Exception as e:
@@ -52,6 +59,13 @@ async def batch_resume(req: BatchResumeRequest, request: Request):
     results = {"succeeded": [], "failed": []}
     for sid in req.sandbox_ids:
         try:
+            sandbox = await engine.get(sid)
+            if not sandbox:
+                results["failed"].append({"sandbox_id": sid, "error": "Not found"})
+                continue
+            if sandbox.get("status") != "paused":
+                results["failed"].append({"sandbox_id": sid, "error": f"Cannot resume: status is '{sandbox.get('status')}'"})
+                continue
             await engine.resume(sid)
             results["succeeded"].append(sid)
         except Exception as e:
@@ -66,6 +80,13 @@ async def batch_destroy(req: BatchDestroyRequest, request: Request):
     results = {"succeeded": [], "failed": []}
     for sid in req.sandbox_ids:
         try:
+            sandbox = await engine.get(sid)
+            if not sandbox:
+                results["failed"].append({"sandbox_id": sid, "error": "Not found"})
+                continue
+            if sandbox.get("status") == "destroyed":
+                results["failed"].append({"sandbox_id": sid, "error": "Already destroyed"})
+                continue
             await engine.destroy(sid)
             results["succeeded"].append(sid)
         except Exception as e:

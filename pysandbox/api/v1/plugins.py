@@ -25,6 +25,8 @@ async def install_plugin(sandbox_id: str, req: InstallPluginRequest, request: Re
     sandbox = await engine.get(sandbox_id)
     if not sandbox:
         raise HTTPException(status_code=404, detail="Sandbox not found")
+    if sandbox.get("status") != "running":
+        raise HTTPException(status_code=409, detail=f"Cannot install plugin: sandbox is '{sandbox.get('status')}'")
 
     plugin_name = req.name or req.plugin_id
     connection = await engine._plugins.install(
@@ -69,6 +71,9 @@ async def get_plugin_instance(sandbox_id: str, plugin_name: str, request: Reques
 async def remove_plugin(sandbox_id: str, plugin_name: str, request: Request):
     """Remove a plugin from a sandbox."""
     engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
     await engine._plugins.remove(sandbox_id, plugin_name)
     return {"status": "removed", "plugin_name": plugin_name}
 
@@ -76,14 +81,29 @@ async def remove_plugin(sandbox_id: str, plugin_name: str, request: Request):
 @router.post("/{plugin_name}/restart")
 async def restart_plugin(sandbox_id: str, plugin_name: str, request: Request):
     """Restart a plugin container."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
     repo = request.app.state.plugin_instance_repo
     docker = request.app.state.docker_runtime
     instance = await repo.get_instance(sandbox_id, plugin_name)
     if not instance or not instance.get("container_id"):
         raise HTTPException(status_code=404, detail="Plugin not found")
-    await docker.stop(instance["container_id"])
-    await docker.start(instance["container_id"])
-    return {"status": "restarted", "plugin_name": plugin_name}
+
+    cid = instance["container_id"]
+    await repo.update_status(sandbox_id, plugin_name, "restarting")
+    try:
+        await docker.stop(cid)
+        await docker.start(cid)
+        # Check health after restart
+        status = await docker.get_container_status(cid)
+        await repo.update_status(sandbox_id, plugin_name, status)
+        return {"status": "restarted", "plugin_name": plugin_name, "container_status": status}
+    except Exception as e:
+        await repo.update_status(sandbox_id, plugin_name, "error")
+        raise HTTPException(status_code=500, detail=f"Restart failed: {e}")
 
 
 @router.get("/{plugin_name}/tools")

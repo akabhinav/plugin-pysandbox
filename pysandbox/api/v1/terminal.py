@@ -21,6 +21,11 @@ async def exec_in_plugin(
     request: Request,
 ):
     """Execute a command inside a plugin container. Returns stdout."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
     docker = request.app.state.docker_runtime
     instance_repo = request.app.state.plugin_instance_repo
 
@@ -52,6 +57,11 @@ async def exec_in_plugin(
 @router.get("/{sandbox_id}")
 async def list_terminals(sandbox_id: str, request: Request):
     """List available plugin containers for terminal access."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
     instance_repo = request.app.state.plugin_instance_repo
     instances = await instance_repo.list_instances(sandbox_id)
     return {

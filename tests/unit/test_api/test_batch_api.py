@@ -17,6 +17,7 @@ def app():
     engine.pause = AsyncMock()
     engine.resume = AsyncMock()
     engine.destroy = AsyncMock()
+    # Default: return a running sandbox
     engine.get = AsyncMock(return_value={
         "id": "sb1", "name": "test", "status": "running",
         "docker_network": "pysb-123", "dns_zone": "123.sandbox.local",
@@ -40,7 +41,11 @@ class TestBatchAPI:
         assert resp.status_code == 200
         assert len(resp.json()["succeeded"]) == 2
 
-    def test_batch_resume(self, client):
+    def test_batch_resume(self, client, app):
+        app.state.sandbox_engine.get = AsyncMock(return_value={
+            "id": "sb1", "name": "test", "status": "paused",
+            "docker_network": "pysb-123", "dns_zone": "123.sandbox.local",
+        })
         resp = client.post("/v1/batch/resume", json={"sandbox_ids": ["sb1"]})
         assert resp.status_code == 200
         assert len(resp.json()["succeeded"]) == 1
@@ -55,6 +60,21 @@ class TestBatchAPI:
         resp = client.post("/v1/batch/pause", json={"sandbox_ids": ["sb1", "sb2"]})
         data = resp.json()
         assert len(data["succeeded"]) == 1
+        assert len(data["failed"]) == 1
+
+    def test_batch_pause_not_found(self, client, app):
+        app.state.sandbox_engine.get = AsyncMock(return_value=None)
+        resp = client.post("/v1/batch/pause", json={"sandbox_ids": ["sb1"]})
+        data = resp.json()
+        assert len(data["succeeded"]) == 0
+        assert len(data["failed"]) == 1
+        assert data["failed"][0]["error"] == "Not found"
+
+    def test_batch_resume_wrong_state(self, client):
+        # Default mock returns status="running", resume requires "paused"
+        resp = client.post("/v1/batch/resume", json={"sandbox_ids": ["sb1"]})
+        data = resp.json()
+        assert len(data["succeeded"]) == 0
         assert len(data["failed"]) == 1
 
     def test_batch_install_plugin(self, client):

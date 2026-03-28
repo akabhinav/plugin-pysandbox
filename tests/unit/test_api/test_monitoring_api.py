@@ -43,6 +43,12 @@ def app():
         "container_id": "abc123",
     })
     app.state.plugin_instance_repo = repo
+
+    engine = MagicMock()
+    engine.get = AsyncMock(return_value={
+        "id": "sb1", "name": "test", "status": "running",
+    })
+    app.state.sandbox_engine = engine
     return app
 
 
@@ -62,8 +68,14 @@ class TestMonitoringAPI:
         assert stats["memory_usage_mb"] == 256.0
         assert stats["plugin_name"] == "postgres"
 
-    def test_get_resource_usage_not_found(self, client, app):
+    def test_get_resource_usage_no_instances(self, client, app):
         app.state.plugin_instance_repo.list_instances = AsyncMock(return_value=[])
+        resp = client.get("/v1/monitoring/resources/sb1")
+        assert resp.status_code == 200
+        assert resp.json()["container_count"] == 0
+
+    def test_get_resource_usage_sandbox_not_found(self, client, app):
+        app.state.sandbox_engine.get = AsyncMock(return_value=None)
         resp = client.get("/v1/monitoring/resources/sb999")
         assert resp.status_code == 404
 

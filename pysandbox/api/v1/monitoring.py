@@ -10,29 +10,50 @@ router = APIRouter(prefix="/v1/monitoring", tags=["monitoring"])
 @router.get("/resources/{sandbox_id}")
 async def get_resource_usage(sandbox_id: str, request: Request):
     """Get live resource stats for all containers in a sandbox."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
     docker = request.app.state.docker_runtime
     instance_repo = request.app.state.plugin_instance_repo
 
     instances = await instance_repo.list_instances(sandbox_id)
     if not instances:
-        raise HTTPException(status_code=404, detail="No instances found")
+        return {"sandbox_id": sandbox_id, "stats": [], "container_count": 0}
 
     stats = []
+    errors = []
     for inst in instances:
         cid = inst.get("container_id")
         if not cid:
             continue
-        container_stats = await docker.get_container_stats(cid)
-        container_stats["plugin_name"] = inst.get("plugin_name", "unknown")
-        container_stats["plugin_id"] = inst.get("plugin_id", "unknown")
-        stats.append(container_stats)
+        try:
+            container_stats = await docker.get_container_stats(cid)
+            container_stats["plugin_name"] = inst.get("plugin_name", "unknown")
+            container_stats["plugin_id"] = inst.get("plugin_id", "unknown")
+            stats.append(container_stats)
+        except Exception as e:
+            errors.append({
+                "plugin_name": inst.get("plugin_name", "unknown"),
+                "container_id": cid[:12],
+                "error": str(e),
+            })
 
-    return {"sandbox_id": sandbox_id, "stats": stats, "container_count": len(stats)}
+    result = {"sandbox_id": sandbox_id, "stats": stats, "container_count": len(stats)}
+    if errors:
+        result["errors"] = errors
+    return result
 
 
 @router.get("/health/{sandbox_id}")
 async def get_health_dashboard(sandbox_id: str, request: Request):
     """Get health status for all plugins in a sandbox."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
     docker = request.app.state.docker_runtime
     instance_repo = request.app.state.plugin_instance_repo
 
@@ -42,7 +63,10 @@ async def get_health_dashboard(sandbox_id: str, request: Request):
         cid = inst.get("container_id")
         status = "unknown"
         if cid:
-            status = await docker.get_container_status(cid)
+            try:
+                status = await docker.get_container_status(cid)
+            except Exception:
+                status = "unreachable"
         results.append({
             "plugin_name": inst.get("plugin_name"),
             "plugin_id": inst.get("plugin_id"),
@@ -65,6 +89,11 @@ async def get_health_dashboard(sandbox_id: str, request: Request):
 @router.get("/logs/{sandbox_id}/{plugin_name}")
 async def get_plugin_logs(sandbox_id: str, plugin_name: str, request: Request, tail: int = 100):
     """Get recent logs for a specific plugin container."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
     docker = request.app.state.docker_runtime
     instance_repo = request.app.state.plugin_instance_repo
 

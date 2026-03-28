@@ -71,6 +71,8 @@ async def destroy_sandbox(sandbox_id: str, request: Request):
     sandbox = await engine.get(sandbox_id)
     if not sandbox:
         raise HTTPException(status_code=404, detail="Sandbox not found")
+    if sandbox.get("status") == "destroyed":
+        raise HTTPException(status_code=409, detail="Sandbox already destroyed")
     await engine.destroy(sandbox_id)
     return {"status": "destroyed", "sandbox_id": sandbox_id}
 
@@ -79,6 +81,11 @@ async def destroy_sandbox(sandbox_id: str, request: Request):
 async def pause_sandbox(sandbox_id: str, request: Request):
     """Pause a sandbox (stop containers, retain volumes)."""
     engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+    if sandbox.get("status") not in ("running",):
+        raise HTTPException(status_code=409, detail=f"Cannot pause sandbox in '{sandbox.get('status')}' state")
     await engine.pause(sandbox_id)
     return {"status": "paused", "sandbox_id": sandbox_id}
 
@@ -87,6 +94,11 @@ async def pause_sandbox(sandbox_id: str, request: Request):
 async def resume_sandbox(sandbox_id: str, request: Request):
     """Resume a paused sandbox."""
     engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+    if sandbox.get("status") not in ("paused",):
+        raise HTTPException(status_code=409, detail=f"Cannot resume sandbox in '{sandbox.get('status')}' state")
     await engine.resume(sandbox_id)
     return {"status": "running", "sandbox_id": sandbox_id}
 
@@ -94,6 +106,10 @@ async def resume_sandbox(sandbox_id: str, request: Request):
 @router.get("/{sandbox_id}/env")
 async def get_sandbox_env(sandbox_id: str, request: Request, reveal: str | None = None):
     """Get all injected env vars (secrets redacted unless specific keys requested)."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
     env_injector = request.app.state.env_injector
     redacted = env_injector.get_redacted(sandbox_id)
     # Allow revealing specific keys (e.g. ?reveal=JUPYTER_TOKEN for Quick Access links)
@@ -109,6 +125,10 @@ async def get_sandbox_env(sandbox_id: str, request: Request, reveal: str | None 
 @router.get("/{sandbox_id}/dns")
 async def get_sandbox_dns(sandbox_id: str, request: Request):
     """Get DNS zone entries."""
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
     dns_manager = request.app.state.dns_manager
     return {"records": dns_manager.get_records(sandbox_id)}
 

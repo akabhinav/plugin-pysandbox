@@ -35,6 +35,14 @@ async def set_ttl(sandbox_id: str, req: SetTTLRequest, request: Request):
     """Set or update TTL for a sandbox."""
     if req.ttl_seconds < 60:
         raise HTTPException(status_code=400, detail="TTL must be at least 60 seconds")
+
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+    if sandbox.get("status") in ("destroyed",):
+        raise HTTPException(status_code=409, detail="Cannot set TTL on destroyed sandbox")
+
     ttl_manager = request.app.state.ttl_manager
     info = ttl_manager.set_ttl(sandbox_id, req.ttl_seconds)
     return info

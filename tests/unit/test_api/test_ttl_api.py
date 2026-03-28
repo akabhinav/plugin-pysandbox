@@ -1,6 +1,7 @@
 """Tests for the TTL API endpoints."""
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from pysandbox.engine.sandbox_ttl import SandboxTTLManager
@@ -13,6 +14,12 @@ def app():
     app = FastAPI()
     app.include_router(router)
     app.state.ttl_manager = SandboxTTLManager()
+
+    engine = MagicMock()
+    engine.get = AsyncMock(return_value={
+        "id": "sb1", "name": "test", "status": "running",
+    })
+    app.state.sandbox_engine = engine
     return app
 
 
