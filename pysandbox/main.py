@@ -11,7 +11,7 @@ from pysandbox.agent.agent_runtime import AgentRuntime
 from pysandbox.agent.tool_registry import AgentToolRegistry
 from pysandbox.api.v1 import (
     agent, batch, catalog, containers, export, health,
-    monitoring, plugins, sandboxes, templates, terminal, timeline, ttl,
+    monitoring, plugins, sandboxes, templates, terminal, timeline, ttl, verify,
 )
 from pysandbox.config.settings import get_settings
 from pysandbox.db.repos.plugin_instance_repo import PluginInstanceRepo
@@ -23,6 +23,8 @@ from pysandbox.engine.resource_guard import ResourceGuard
 from pysandbox.engine.sandbox_engine import SandboxEngine
 from pysandbox.engine.activity_timeline import ActivityTimeline
 from pysandbox.engine.sandbox_ttl import SandboxTTLManager
+from pysandbox.engine.sandbox_seeder import SandboxSeeder
+from pysandbox.engine.sandbox_verify import SandboxVerifier
 from pysandbox.engine.templates import TemplateRegistry
 from pysandbox.plugin.loader import discover_and_load_all
 from pysandbox.runtime.dns_server import SandboxDNSManager
@@ -97,6 +99,17 @@ async def lifespan(app: FastAPI):
         sandbox_repo=sandbox_repo,
     )
 
+    # Build verification and seeding engines
+    sandbox_verifier = SandboxVerifier(
+        tool_registry=tool_registry,
+        instance_repo=instance_repo,
+        docker_runtime=docker_runtime,
+    )
+    sandbox_seeder = SandboxSeeder(
+        tool_registry=tool_registry,
+        instance_repo=instance_repo,
+    )
+
     # Store on app state for endpoint access
     app.state.sandbox_engine = sandbox_engine
     app.state.plugin_engine = plugin_engine
@@ -111,6 +124,8 @@ async def lifespan(app: FastAPI):
     app.state.template_registry = template_registry
     app.state.activity_timeline = activity_timeline
     app.state.ttl_manager = ttl_manager
+    app.state.sandbox_verifier = sandbox_verifier
+    app.state.sandbox_seeder = sandbox_seeder
 
     # Wire TTL manager to sandbox engine and start background checker
     ttl_manager.set_engine(sandbox_engine)
@@ -164,6 +179,8 @@ def create_app() -> FastAPI:
     app.include_router(export.router)
     app.include_router(batch.router)
     app.include_router(terminal.router)
+    app.include_router(verify.router)
+    app.include_router(verify.quickstart_router)
 
     return app
 

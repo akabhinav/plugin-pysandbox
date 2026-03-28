@@ -516,10 +516,74 @@ def page_sandbox_detail():
                 ">🔗 Open {name}</a>
                 """, unsafe_allow_html=True)
 
+    # ── Verify / Seed / Quickstart Action Bar ──
+    if status == "running":
+        st.markdown('<div class="section-header">Developer Tools</div>', unsafe_allow_html=True)
+        dev_c1, dev_c2, dev_c3 = st.columns(3)
+        with dev_c1:
+            if st.button("✅ Verify Sandbox", use_container_width=True, help="Run smoke tests on all plugins"):
+                with st.spinner("Running verification checks..."):
+                    verify_result = api("POST", f"/v1/sandboxes/{sandbox_id}/verify")
+                if verify_result:
+                    st.session_state[f"verify_result_{sandbox_id}"] = verify_result
+                    st.rerun()
+        with dev_c2:
+            if st.button("🌱 Seed Sample Data", use_container_width=True, help="Pre-load realistic data into all plugins"):
+                with st.spinner("Seeding data..."):
+                    seed_result = api("POST", f"/v1/sandboxes/{sandbox_id}/seed")
+                if seed_result:
+                    st.session_state[f"seed_result_{sandbox_id}"] = seed_result
+                    st.rerun()
+        with dev_c3:
+            qs_data = api("GET", f"/v1/sandboxes/{sandbox_id}/quickstart")
+            if qs_data and "steps" in qs_data:
+                st.markdown(f"**📖 Quickstart available** — {qs_data.get('title', 'Guide')}")
+            else:
+                st.markdown("*No quickstart for this sandbox*")
+
+        # Show verification results if available
+        vr = st.session_state.get(f"verify_result_{sandbox_id}")
+        if vr:
+            if vr.get("success"):
+                st.success(f"✅ All checks passed! ({vr['passed']}/{vr['total']} in {vr['duration_ms']}ms)")
+            else:
+                st.error(f"❌ {vr['failed']} of {vr['total']} checks failed ({vr['duration_ms']}ms)")
+            with st.expander("Verification Details", expanded=not vr.get("success")):
+                for step in vr.get("steps", []):
+                    icon = "✅" if step["passed"] else "❌"
+                    cat = f"[{step['category']}]" if step.get("category") == "cross-plugin" else ""
+                    st.markdown(f"{icon} **{step['plugin']}** — {step['name']} {cat} *({step['duration_ms']}ms)*")
+                    if not step["passed"]:
+                        st.caption(f"  {step['message']}")
+                        if step.get("output"):
+                            st.code(step["output"][:300], language="text")
+            if st.button("Clear Results", key="clear_verify"):
+                del st.session_state[f"verify_result_{sandbox_id}"]
+                st.rerun()
+
+        # Show seed results if available
+        sr = st.session_state.get(f"seed_result_{sandbox_id}")
+        if sr:
+            if sr.get("success"):
+                total_rows = sum(s.get("rows_created", 0) for s in sr.get("steps", []))
+                st.success(f"🌱 Seeding complete! {sr['succeeded']} steps, ~{total_rows} records created ({sr['duration_ms']}ms)")
+            else:
+                st.warning(f"🌱 Seeding partially failed: {sr['succeeded']} succeeded, {sr['failed']} failed")
+            with st.expander("Seed Details", expanded=not sr.get("success")):
+                for step in sr.get("steps", []):
+                    icon = "✅" if step["success"] else "❌"
+                    rows = f" ({step['rows_created']} rows)" if step.get("rows_created") else ""
+                    st.markdown(f"{icon} **{step['plugin']}** — {step['name']}{rows}")
+                    if not step["success"]:
+                        st.caption(f"  {step['message']}")
+            if st.button("Clear Results", key="clear_seed"):
+                del st.session_state[f"seed_result_{sandbox_id}"]
+                st.rerun()
+
     # Tabs
-    tab_plugins, tab_run, tab_monitor, tab_terminal, tab_timeline, tab_env, tab_dns, tab_tools, tab_settings = st.tabs([
+    tab_plugins, tab_run, tab_monitor, tab_terminal, tab_quickstart, tab_timeline, tab_env, tab_dns, tab_tools, tab_settings = st.tabs([
         f"🔌 Plugins ({len(plugins)})", "▶️ Run Tool", "📊 Monitoring", "💻 Terminal",
-        "📜 Timeline", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools", "⚙️ Settings"
+        "📖 Quickstart", "📜 Timeline", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools", "⚙️ Settings"
     ])
 
     # ── Plugins Tab ──
@@ -941,6 +1005,70 @@ def page_sandbox_detail():
                                 st.rerun()
             else:
                 st.info("No containers available for terminal access.")
+
+    # ── Quickstart Tab ──
+    with tab_quickstart:
+        qs = api("GET", f"/v1/sandboxes/{sandbox_id}/quickstart")
+        if qs and "steps" in qs:
+            st.markdown(f'<div class="section-header">{qs["title"]}</div>', unsafe_allow_html=True)
+            st.markdown(f'*{qs["description"]}*  —  **~{qs["estimated_minutes"]} min**')
+            st.markdown("---")
+
+            # Track completion state in session
+            completed_key = f"qs_completed_{sandbox_id}"
+            if completed_key not in st.session_state:
+                st.session_state[completed_key] = set()
+
+            for step in qs.get("steps", []):
+                step_num = step["step"]
+                is_done = step_num in st.session_state[completed_key]
+                icon = "✅" if is_done else f"**{step_num}.**"
+
+                st.markdown(f"{icon} **{step['title']}**")
+                st.markdown(f"  {step['description']}")
+
+                if step.get("tip"):
+                    st.info(f"💡 {step['tip']}")
+
+                # Show pre-filled command if there's a tool
+                if step.get("tool"):
+                    import json as _json
+                    st.code(f"Tool: {step['tool']}\nParams: {_json.dumps(step['params'], indent=2)}", language="json")
+
+                    if not is_done and status == "running":
+                        if st.button(f"▶️ Run Step {step_num}", key=f"qs_run_{sandbox_id}_{step_num}", use_container_width=True):
+                            with st.spinner(f"Running {step['title']}..."):
+                                result = api("POST", f"/v1/sandboxes/{sandbox_id}/agent/tools/{step['tool']}/execute", json={"params": step["params"]})
+                            if result:
+                                st.session_state[completed_key].add(step_num)
+                                if result.get("status") == "completed":
+                                    st.success(f"Output: {str(result.get('result', ''))[:300]}")
+                                else:
+                                    st.error(f"Error: {result.get('error', 'Unknown')}")
+                else:
+                    st.markdown(f"  *Expected:* {step.get('expected_output', '')}")
+
+                st.markdown("---")
+
+            total = len(qs.get("steps", []))
+            done = len(st.session_state[completed_key])
+            if done == total and total > 0:
+                st.balloons()
+                st.success(f"🎉 Quickstart complete! All {total} steps finished.")
+            else:
+                st.progress(done / max(total, 1), text=f"{done}/{total} steps completed")
+
+            if done > 0 and st.button("🔄 Reset Progress", key="qs_reset"):
+                st.session_state[completed_key] = set()
+                st.rerun()
+        else:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="empty-icon">📖</div>
+                <div class="empty-text">No quickstart guide available for this sandbox.</div>
+                <div class="empty-subtext">Quickstarts are available for sandboxes created from templates.</div>
+            </div>
+            """, unsafe_allow_html=True)
 
     # ── Timeline Tab ──
     with tab_timeline:
