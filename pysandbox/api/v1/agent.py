@@ -4,12 +4,35 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/v1/sandboxes/{sandbox_id}/agent", tags=["agent"])
+
+
+def _record_if_active(request: Request, sandbox_id: str, tool_name: str,
+                      params: dict[str, Any], result: Any, status: str,
+                      duration_ms: int) -> None:
+    """If a SandboxRecorder session is active, append this tool call to it.
+
+    Silently no-ops when no recorder is configured or no session is
+    active — the feature is fully opt-in.
+    """
+    recorder = getattr(request.app.state, "recorder", None)
+    if recorder is None or not recorder.is_active(sandbox_id):
+        return
+    result_str = result if isinstance(result, str) else json.dumps(result, default=str)
+    recorder.record_call(
+        sandbox_id=sandbox_id,
+        tool=tool_name,
+        args=params,
+        result=result_str,
+        status=status,
+        duration_ms=duration_ms,
+    )
 
 
 class ExecuteTaskRequest(BaseModel):
@@ -53,8 +76,11 @@ async def execute_agent_task(sandbox_id: str, req: ExecuteTaskRequest, request: 
                         k, v = kv.split("=", 1)
                         params[k] = v
 
+        start = time.monotonic()
         try:
             result = await asyncio.wait_for(tool.handler(params), timeout=req.timeout)
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _record_if_active(request, sandbox_id, tool_name, params, result, "ok", duration_ms)
             return {
                 "status": "completed",
                 "sandbox_id": sandbox_id,
@@ -62,6 +88,8 @@ async def execute_agent_task(sandbox_id: str, req: ExecuteTaskRequest, request: 
                 "result": result,
             }
         except asyncio.TimeoutError:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _record_if_active(request, sandbox_id, tool_name, params, "", "timeout", duration_ms)
             return {
                 "status": "timeout",
                 "sandbox_id": sandbox_id,
@@ -69,6 +97,8 @@ async def execute_agent_task(sandbox_id: str, req: ExecuteTaskRequest, request: 
                 "error": f"Tool execution timed out after {req.timeout}s",
             }
         except Exception as e:
+            duration_ms = int((time.monotonic() - start) * 1000)
+            _record_if_active(request, sandbox_id, tool_name, params, str(e), "error", duration_ms)
             return {
                 "status": "error",
                 "sandbox_id": sandbox_id,
@@ -99,8 +129,11 @@ async def execute_tool(sandbox_id: str, tool_name: str, req: ToolCallRequest, re
             detail={"error": f"Tool '{tool_name}' not found", "available_tools": available},
         )
 
+    start = time.monotonic()
     try:
         result = await asyncio.wait_for(tool.handler(req.params), timeout=120)
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _record_if_active(request, sandbox_id, tool_name, req.params, result, "ok", duration_ms)
         return {
             "status": "completed",
             "tool": tool_name,
@@ -108,8 +141,12 @@ async def execute_tool(sandbox_id: str, tool_name: str, req: ToolCallRequest, re
             "result": result,
         }
     except asyncio.TimeoutError:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _record_if_active(request, sandbox_id, tool_name, req.params, "", "timeout", duration_ms)
         raise HTTPException(status_code=504, detail=f"Tool '{tool_name}' execution timed out")
     except Exception as e:
+        duration_ms = int((time.monotonic() - start) * 1000)
+        _record_if_active(request, sandbox_id, tool_name, req.params, str(e), "error", duration_ms)
         raise HTTPException(status_code=500, detail=f"Tool execution failed: {e}")
 
 

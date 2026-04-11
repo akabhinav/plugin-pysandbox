@@ -10,8 +10,8 @@ from fastapi import FastAPI
 from pysandbox.agent.agent_runtime import AgentRuntime
 from pysandbox.agent.tool_registry import AgentToolRegistry
 from pysandbox.api.v1 import (
-    agent, batch, catalog, chaos, containers, export, health,
-    monitoring, plugins, sandboxes, templates, terminal, timeline, ttl, verify,
+    agent, batch, catalog, chaos, containers, ephemeral, export, health,
+    monitoring, plugins, pyverify, recorder, sandboxes, templates, terminal, timeline, ttl, verify,
 )
 from pysandbox.config.settings import get_settings
 from pysandbox.db.repos.plugin_instance_repo import PluginInstanceRepo
@@ -24,6 +24,8 @@ from pysandbox.engine.sandbox_engine import SandboxEngine
 from pysandbox.engine.activity_timeline import ActivityTimeline
 from pysandbox.engine.chaos import ChaosEngine
 from pysandbox.engine.cost_meter import CostMeter
+from pysandbox.engine.ephemeral import EphemeralSandboxLauncher
+from pysandbox.engine.recorder import SandboxRecorder
 from pysandbox.engine.sandbox_ttl import SandboxTTLManager
 from pysandbox.engine.sandbox_seeder import SandboxSeeder
 from pysandbox.engine.sandbox_verify import SandboxVerifier
@@ -72,6 +74,12 @@ async def lifespan(app: FastAPI):
     ttl_manager = SandboxTTLManager()
     cost_meter = CostMeter()
     chaos_engine = ChaosEngine(docker_runtime=docker_runtime, instance_repo=instance_repo)
+    sandbox_recorder = SandboxRecorder()
+    # Ephemeral launcher wires the existing sandbox engine + TTL manager
+    # together so the `/spin` endpoint is just sugar over what we already
+    # have — no parallel lifecycle to maintain.
+    # It's set up after sandbox_engine is built below.
+    ephemeral_launcher = None  # filled below
 
     # Wire event bus subscriptions
     event_bus.subscribe("plugin.installed", tool_registry.on_plugin_installed)
@@ -132,6 +140,11 @@ async def lifespan(app: FastAPI):
     app.state.sandbox_seeder = sandbox_seeder
     app.state.cost_meter = cost_meter
     app.state.chaos_engine = chaos_engine
+    app.state.recorder = sandbox_recorder
+    app.state.ephemeral_launcher = EphemeralSandboxLauncher(
+        sandbox_engine=sandbox_engine,
+        ttl_manager=ttl_manager,
+    )
 
     # Wire TTL manager to sandbox engine and start background checker
     ttl_manager.set_engine(sandbox_engine)
@@ -188,6 +201,9 @@ def create_app() -> FastAPI:
     app.include_router(verify.router)
     app.include_router(verify.quickstart_router)
     app.include_router(chaos.router)
+    app.include_router(pyverify.router)
+    app.include_router(recorder.router)
+    app.include_router(ephemeral.router)
 
     return app
 
