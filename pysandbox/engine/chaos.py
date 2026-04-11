@@ -200,12 +200,30 @@ class ChaosEngine:
         *,
         cpus: float,
     ) -> dict[str, Any]:
-        """Limit the container to a fraction of a vCPU via `docker update`."""
+        """Limit the container to a fraction of a vCPU at runtime.
+
+        Two interacting quirks make this harder than it looks:
+          1. docker-py's `container.update()` doesn't accept `nano_cpus`
+             (it's a `containers.run()` kwarg only); trying to pass it
+             raises TypeError.
+          2. pysandbox creates every container with `nano_cpus`, so the
+             kernel records NanoCPUs as the CPU-control mode. Docker then
+             rejects any later update that tries to set `cpu_period` /
+             `cpu_quota` with "Conflicting options: CPU Period cannot be
+             updated as NanoCPUs has already been set".
+
+        The combination means we can't use either high-level docker-py
+        path. The fix is a raw HTTP POST to /containers/{id}/update
+        with `{"NanoCPUs": <value>}`, which is what the Docker Engine API
+        actually expects when NanoCPUs is the active CPU-control mode.
+        """
         inst = await self._resolve_instance(sandbox_id, plugin_name)
         cid = inst["container_id"]
-        await self._docker_update(cid, nano_cpus=int(cpus * 1e9))
+        nano = int(cpus * 1e9)
+        await self._docker_update_nanocpus(cid, nano)
         injection = self._new_injection(
-            sandbox_id, plugin_name, cid, "cpu_throttle", {"cpus": cpus},
+            sandbox_id, plugin_name, cid, "cpu_throttle",
+            {"cpus": cpus, "nano_cpus": nano},
         )
         self._registry.add(injection)
         return self._to_dict(injection)
@@ -317,8 +335,10 @@ class ChaosEngine:
                 inj.container_id, "tc qdisc del dev eth0 root 2>/dev/null || true",
             )
         elif inj.fault_type == "cpu_throttle":
-            # Restore to an unlimited default.
-            await self._docker_update(inj.container_id, nano_cpus=0)
+            # Restore to an unlimited default. Same NanoCPUs constraint
+            # as cpu_throttle: we have to go through the raw HTTP API.
+            # Setting NanoCPUs=0 tells Docker "no CPU cap".
+            await self._docker_update_nanocpus(inj.container_id, 0)
         elif inj.fault_type == "mem_throttle":
             # Docker doesn't actually support removing memory limits at
             # runtime; the closest we can get is raising them very high.
@@ -342,4 +362,22 @@ class ChaosEngine:
             client = self._docker._get_client()
             container = client.containers.get(container_id)
             container.update(**kwargs)
+        await asyncio.to_thread(_run)
+
+    async def _docker_update_nanocpus(self, container_id: str, nano_cpus: int) -> None:
+        """Raw HTTP POST to /containers/{id}/update with NanoCPUs.
+
+        Bypasses docker-py's high-level update_container helper because
+        that helper doesn't expose `nano_cpus`, and the Docker daemon
+        refuses cpu_period/cpu_quota updates on containers that were
+        created with nano_cpus (which pysandbox always does). Going
+        direct to the low-level HTTP client is the only way to change
+        CPU limits on existing plugin containers.
+        """
+        def _run():
+            client = self._docker._get_client()
+            api = client.api  # docker-py low-level client
+            url = api._url(f"/containers/{container_id}/update")
+            res = api._post_json(url, data={"NanoCPUs": nano_cpus})
+            api._raise_for_status(res)
         await asyncio.to_thread(_run)

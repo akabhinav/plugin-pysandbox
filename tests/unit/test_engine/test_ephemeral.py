@@ -147,3 +147,66 @@ class TestLauncher:
         assert sid in registry
         launcher.release_short_id(sid)
         assert sid not in registry
+
+    def test_best_version_prefers_concrete_over_latest(
+        self, sandbox_engine, ttl_manager, monkeypatch,
+    ):
+        """_best_version_for skips 'latest' so image templates like
+        `redis:{version}-alpine` don't explode into `redis:latest-alpine`.
+        """
+        launcher = EphemeralSandboxLauncher(sandbox_engine, ttl_manager)
+
+        fake_manifest = MagicMock()
+        fake_manifest.supported_versions = ["latest", "7", "6"]
+        fake_manifest.default_version = "latest"
+
+        monkeypatch.setattr(
+            "pysandbox.plugin.registry.get_manifest",
+            lambda pid: fake_manifest,
+        )
+        assert launcher._best_version_for("redis") == "7"
+
+    def test_best_version_falls_back_when_all_latest(
+        self, sandbox_engine, ttl_manager, monkeypatch,
+    ):
+        launcher = EphemeralSandboxLauncher(sandbox_engine, ttl_manager)
+        fake_manifest = MagicMock()
+        fake_manifest.supported_versions = ["latest"]
+        fake_manifest.default_version = "latest"
+        monkeypatch.setattr(
+            "pysandbox.plugin.registry.get_manifest",
+            lambda pid: fake_manifest,
+        )
+        assert launcher._best_version_for("whatever") == "latest"
+
+    def test_best_version_returns_none_on_unknown_plugin(
+        self, sandbox_engine, ttl_manager, monkeypatch,
+    ):
+        launcher = EphemeralSandboxLauncher(sandbox_engine, ttl_manager)
+
+        def _raise(pid):
+            raise RuntimeError("nope")
+
+        monkeypatch.setattr(
+            "pysandbox.plugin.registry.get_manifest", _raise,
+        )
+        assert launcher._best_version_for("ghost") is None
+
+    @pytest.mark.asyncio
+    async def test_launch_injects_resolved_version(
+        self, sandbox_engine, ttl_manager, monkeypatch,
+    ):
+        """End-to-end: launcher asks the registry for a best version and
+        wires it into the plugin spec that goes to SandboxEngine.create()."""
+        launcher = EphemeralSandboxLauncher(sandbox_engine, ttl_manager)
+        fake_manifest = MagicMock()
+        fake_manifest.supported_versions = ["latest", "7"]
+        fake_manifest.default_version = "latest"
+        monkeypatch.setattr(
+            "pysandbox.plugin.registry.get_manifest",
+            lambda pid: fake_manifest,
+        )
+
+        await launcher.launch_from_request(plugins=["redis"])
+        plugins = sandbox_engine.create.call_args.kwargs["plugins"]
+        assert plugins[0]["version"] == "7"

@@ -139,7 +139,13 @@ class EphemeralSandboxLauncher:
         name = spec.name or f"eph-{short_id}"
 
         plugin_specs = [
-            {"plugin_id": p, "name": p, "expose": True, "config": {}}
+            {
+                "plugin_id": p,
+                "name": p,
+                "version": self._best_version_for(p),
+                "expose": True,
+                "config": {},
+            }
             for p in spec.plugins
         ]
         sandbox = await self._engine.create(
@@ -194,3 +200,27 @@ class EphemeralSandboxLauncher:
     def release_short_id(self, short_id: str) -> None:
         """Let the short ID be reused once the sandbox is destroyed."""
         self._short_ids.discard(short_id)
+
+    def _best_version_for(self, plugin_id: str) -> str | None:
+        """Pick the best version tag for an ephemeral sandbox.
+
+        Some plugins (notably redis, nats) use a `{version}-alpine`
+        image template where `{version}=latest` expands to an invalid
+        tag like `redis:latest-alpine`. To make "one-click spin" always
+        work, we prefer the first concrete version in `supported_versions`
+        that isn't literally "latest". If the manifest only lists
+        "latest", we fall through and let the plugin engine handle it.
+        """
+        try:
+            # Local import: manifests are registered lazily, so importing
+            # at module load time would create a chicken-and-egg with
+            # plugin discovery.
+            from pysandbox.plugin.registry import get_manifest
+            manifest = get_manifest(plugin_id)
+        except Exception:
+            return None
+        versions = list(manifest.supported_versions or [])
+        for v in versions:
+            if v and v.lower() != "latest":
+                return v
+        return manifest.default_version or None

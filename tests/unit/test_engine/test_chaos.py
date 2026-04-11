@@ -17,9 +17,16 @@ def docker_runtime():
     client = MagicMock()
     container = MagicMock()
     client.containers.get.return_value = container
+    # The raw low-level `client.api` is used by the NanoCPUs path.
+    api = MagicMock()
+    api._url = MagicMock(side_effect=lambda path: f"http://localhost{path}")
+    api._post_json = MagicMock(return_value=MagicMock(status_code=200))
+    api._raise_for_status = MagicMock()
+    client.api = api
     rt._get_client = MagicMock(return_value=client)
     rt._client = client
     rt._captured_container = container
+    rt._captured_api = api
     return rt
 
 
@@ -97,11 +104,17 @@ class TestChaosLatency:
 
 class TestChaosThrottle:
     @pytest.mark.asyncio
-    async def test_cpu_throttle_calls_container_update(self, engine, docker_runtime):
+    async def test_cpu_throttle_posts_nanocpus_via_raw_api(self, engine, docker_runtime):
         await engine.cpu_throttle("sb-1", "redis", cpus=0.5)
-        docker_runtime._captured_container.update.assert_called_once()
-        kwargs = docker_runtime._captured_container.update.call_args.kwargs
-        assert kwargs["nano_cpus"] == int(0.5 * 1e9)
+        # We use the low-level HTTP client directly because docker-py's
+        # high-level `container.update()` doesn't accept nano_cpus and
+        # Docker refuses cpu_period/cpu_quota on containers created with
+        # NanoCPUs. The chaos engine sends a raw POST with NanoCPUs set.
+        docker_runtime._captured_api._post_json.assert_called_once()
+        call = docker_runtime._captured_api._post_json.call_args
+        assert "/containers/" in call.args[0]
+        assert "/update" in call.args[0]
+        assert call.kwargs["data"] == {"NanoCPUs": 500_000_000}
 
     @pytest.mark.asyncio
     async def test_memory_throttle_calls_container_update(self, engine, docker_runtime):
