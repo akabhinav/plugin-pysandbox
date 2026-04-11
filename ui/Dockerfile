@@ -4,7 +4,11 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir streamlit httpx
 
-COPY app.py .
+# Copy every Python module in ui/ so new feature files (e.g. features.py)
+# are picked up without having to edit the Dockerfile each time one is
+# added. `app.py` imports from `features` at startup, so omitting any
+# file here crashes the container on first load.
+COPY *.py .
 
 EXPOSE 8501
 
