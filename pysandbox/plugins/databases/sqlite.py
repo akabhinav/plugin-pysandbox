@@ -17,8 +17,12 @@ class SQLitePlugin(PluginDefinition):
 
     def get_docker_config(self, plugin_name, sandbox_id, dns_zone, credentials, config, version):
         return {
-            "image": "alpine:latest",
-            "command": ["sh", "-c", "apk add --no-cache sqlite && tail -f /dev/null"],
+            # Use an image that already ships sqlite3; the previous alpine:latest
+            # variant ran `apk add sqlite` at startup, which required outbound DNS
+            # at install time and broke in offline/restricted networks.
+            "image": config.get("image", "alpine/sqlite:latest"),
+            "entrypoint": ["sh", "-c"],
+            "command": ["touch /data/sandbox.db && tail -f /dev/null"],
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/data", "mode": "rw"},
             },
@@ -27,7 +31,7 @@ class SQLitePlugin(PluginDefinition):
                 "interval": 5_000_000_000,
                 "timeout": 2_000_000_000,
                 "retries": 5,
-                "start_period": 30_000_000_000,
+                "start_period": 10_000_000_000,
             },
         }
 

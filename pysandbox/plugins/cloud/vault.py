@@ -37,6 +37,17 @@ class VaultPlugin(PluginDefinition):
             "environment": {
                 "VAULT_DEV_ROOT_TOKEN_ID": credentials["root_token"],
                 "VAULT_DEV_LISTEN_ADDRESS": "0.0.0.0:8200",
+                # VAULT_ADDR is needed by the in-container `vault` CLI
+                # (healthcheck, agent tools) so it talks to the local server.
+                "VAULT_ADDR": "http://127.0.0.1:8200",
+                # Skip `setcap cap_ipc_lock=+ep` in the Vault entrypoint.
+                # That step fails on kernels / storage drivers that don't
+                # support file capabilities (e.g. vfs). Without SKIP_SETCAP,
+                # vault exits immediately with
+                #   "Failed to set capabilities on file '/bin/vault': Not supported".
+                # Skipping it only disables mlock (prevents swapping secrets
+                # to disk) which isn't meaningful inside a disposable sandbox.
+                "SKIP_SETCAP": "true",
             },
             "healthcheck": {
                 "test": ["CMD-SHELL", "vault status"],

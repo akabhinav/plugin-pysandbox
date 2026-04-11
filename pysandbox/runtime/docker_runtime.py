@@ -21,10 +21,16 @@ class DockerRuntime:
         self._client = None
 
     def _get_client(self):
-        """Lazy-init Docker client."""
+        """Lazy-init Docker client with a generous read timeout.
+
+        The default docker-py timeout is 60s, which is too tight for large
+        images (spark, jupyter, dremio, elasticsearch) on slow storage where
+        container creation can take several minutes. Bumping to 300s avoids
+        spurious install failures without masking real hangs.
+        """
         if self._client is None:
             import docker
-            self._client = docker.from_env()
+            self._client = docker.from_env(timeout=300)
         return self._client
 
     async def create_network(self, name: str, labels: dict[str, str] | None = None) -> str:
@@ -126,6 +132,7 @@ class DockerRuntime:
             environment = docker_config.get("environment", {})
             volumes = docker_config.get("volumes", {})
             command = docker_config.get("command")
+            entrypoint = docker_config.get("entrypoint")
             healthcheck = docker_config.get("healthcheck")
 
             # Parse memory limit
@@ -147,7 +154,7 @@ class DockerRuntime:
                     f"It may have been removed by a concurrent operation."
                 ) from e
 
-            container = client.containers.run(
+            run_kwargs = dict(
                 image=image,
                 name=container_name,
                 detach=True,
@@ -165,6 +172,9 @@ class DockerRuntime:
                 },
                 restart_policy={"Name": "unless-stopped"},
             )
+            if entrypoint is not None:
+                run_kwargs["entrypoint"] = entrypoint
+            container = client.containers.run(**run_kwargs)
 
             # Add network alias
             try:

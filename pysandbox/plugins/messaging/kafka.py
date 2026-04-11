@@ -18,13 +18,40 @@ from pysandbox.plugin.registry import register_plugin
 class KafkaPlugin(PluginDefinition):
 
     def get_docker_config(self, plugin_name, sandbox_id, dns_zone, credentials, config, version):
+        # Allow overriding the image. The default is Confluent Local (KRaft
+        # mode) but in environments where that image can't be pulled (e.g.
+        # storage drivers that don't support xattr security.capability),
+        # users can fall back to bitnami/kafka via config={"image": ...}.
+        image = config.get("image", f"confluentinc/confluent-local:{version}")
+        is_bitnami = "bitnami" in image
+        environment = {
+            "KAFKA_ADVERTISED_LISTENERS": f"PLAINTEXT://{plugin_name}.{dns_zone}:9092",
+        }
+        if is_bitnami:
+            # bitnami/kafka expects its own env var names for KRaft setup
+            environment.update({
+                "KAFKA_CFG_NODE_ID": "1",
+                "KAFKA_CFG_PROCESS_ROLES": "broker,controller",
+                "KAFKA_CFG_LISTENERS": "PLAINTEXT://:9092,CONTROLLER://:9093",
+                "KAFKA_CFG_ADVERTISED_LISTENERS": f"PLAINTEXT://{plugin_name}.{dns_zone}:9092",
+                "KAFKA_CFG_CONTROLLER_LISTENER_NAMES": "CONTROLLER",
+                "KAFKA_CFG_CONTROLLER_QUORUM_VOTERS": "1@localhost:9093",
+                "KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP": "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT",
+                "KAFKA_CFG_INTER_BROKER_LISTENER_NAME": "PLAINTEXT",
+                "ALLOW_PLAINTEXT_LISTENER": "yes",
+            })
         return {
-            "image": f"confluentinc/confluent-local:{version}",
-            "environment": {
-                "KAFKA_ADVERTISED_LISTENERS": f"PLAINTEXT://{plugin_name}.{dns_zone}:9092",
-            },
+            "image": image,
+            "environment": environment,
             "healthcheck": {
-                "test": ["CMD-SHELL", "nc -z localhost 9092 || exit 1"],
+                # Use bash's builtin /dev/tcp TCP probe — works even when `nc`
+                # isn't installed in the image (bitnami/kafka omits it) and
+                # doesn't require shelling out to any Kafka CLI, which would
+                # add several seconds per probe on cold start.
+                "test": [
+                    "CMD-SHELL",
+                    "bash -c 'exec 3<>/dev/tcp/localhost/9092' 2>/dev/null || exit 1",
+                ],
                 "interval": 5_000_000_000,
                 "timeout": 5_000_000_000,
                 "retries": 30,

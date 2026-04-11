@@ -16,19 +16,43 @@ from pysandbox.plugin.registry import register_plugin
 class MySQLPlugin(PluginDefinition):
 
     def get_docker_config(self, plugin_name, sandbox_id, dns_zone, credentials, config, version):
+        # Allow overriding the image, e.g. to use `mariadb:11` as a drop-in
+        # replacement in environments where the official `mysql:` image can't
+        # be pulled (uses fs features some storage drivers don't support).
+        # MariaDB ships the same `mysql`/`mysqladmin` CLI tools, so all agent
+        # handlers continue to work unchanged.
+        image = config.get("image", f"mysql:{version}")
         return {
-            "image": f"mysql:{version}",
+            "image": image,
             "environment": {
                 "MYSQL_ROOT_PASSWORD": credentials["root_password"],
                 "MYSQL_DATABASE": credentials["database"],
                 "MYSQL_USER": credentials["user"],
                 "MYSQL_PASSWORD": credentials["password"],
+                # MariaDB honors MARIADB_* but also accepts MYSQL_*;
+                # set both for maximum compatibility.
+                "MARIADB_ROOT_PASSWORD": credentials["root_password"],
+                "MARIADB_DATABASE": credentials["database"],
+                "MARIADB_USER": credentials["user"],
+                "MARIADB_PASSWORD": credentials["password"],
             },
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/var/lib/mysql", "mode": "rw"},
             },
             "healthcheck": {
-                "test": ["CMD-SHELL", f"mysqladmin ping -u{credentials['user']} -p{credentials['password']}"],
+                # mysqladmin / mariadb-admin ping returns 0 even if the server
+                # replies with "access denied", which still proves the daemon
+                # is accepting TCP connections. Avoiding --user/--password
+                # sidesteps shell-quoting issues when the generated password
+                # contains `-` or `=` (common with token_urlsafe). Try both
+                # CLI names so the healthcheck works against either the
+                # official `mysql:` image or the `mariadb:` drop-in.
+                "test": [
+                    "CMD-SHELL",
+                    "mysqladmin ping --protocol=tcp -h 127.0.0.1 --silent 2>/dev/null "
+                    "|| mariadb-admin ping --protocol=tcp -h 127.0.0.1 --silent 2>/dev/null "
+                    "|| exit 1",
+                ],
                 "interval": 5_000_000_000,
                 "timeout": 3_000_000_000,
                 "retries": 12,
