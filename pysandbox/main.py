@@ -10,8 +10,9 @@ from fastapi import FastAPI
 from pysandbox.agent.agent_runtime import AgentRuntime
 from pysandbox.agent.tool_registry import AgentToolRegistry
 from pysandbox.api.v1 import (
-    agent, batch, catalog, chaos, containers, ephemeral, export, health,
-    monitoring, plugins, pyverify, recorder, sandboxes, templates, terminal, timeline, ttl, verify,
+    agent, batch, branching, catalog, chaos, containers, ephemeral, export, health,
+    monitoring, plugins, pyverify, recorder, sandboxes, templates, terminal, time_travel,
+    timeline, ttl, verify,
 )
 from pysandbox.config.settings import get_settings
 from pysandbox.db.repos.plugin_instance_repo import PluginInstanceRepo
@@ -22,11 +23,13 @@ from pysandbox.engine.plugin_engine import PluginEngine
 from pysandbox.engine.resource_guard import ResourceGuard
 from pysandbox.engine.sandbox_engine import SandboxEngine
 from pysandbox.engine.activity_timeline import ActivityTimeline
+from pysandbox.engine.branching import SandboxBrancher
 from pysandbox.engine.chaos import ChaosEngine
 from pysandbox.engine.cost_meter import CostMeter
 from pysandbox.engine.ephemeral import EphemeralSandboxLauncher
 from pysandbox.engine.recorder import SandboxRecorder
 from pysandbox.engine.sandbox_ttl import SandboxTTLManager
+from pysandbox.engine.time_travel import TimeTravelEngine
 from pysandbox.engine.sandbox_seeder import SandboxSeeder
 from pysandbox.engine.sandbox_verify import SandboxVerifier
 from pysandbox.engine.templates import TemplateRegistry
@@ -145,6 +148,16 @@ async def lifespan(app: FastAPI):
         sandbox_engine=sandbox_engine,
         ttl_manager=ttl_manager,
     )
+    app.state.brancher = SandboxBrancher(
+        sandbox_engine=sandbox_engine,
+        instance_repo=instance_repo,
+        docker_runtime=docker_runtime,
+    )
+    app.state.time_travel_engine = TimeTravelEngine(
+        sandbox_engine=sandbox_engine,
+        instance_repo=instance_repo,
+        docker_runtime=docker_runtime,
+    )
 
     # Wire TTL manager to sandbox engine and start background checker
     ttl_manager.set_engine(sandbox_engine)
@@ -204,6 +217,8 @@ def create_app() -> FastAPI:
     app.include_router(pyverify.router)
     app.include_router(recorder.router)
     app.include_router(ephemeral.router)
+    app.include_router(branching.router)
+    app.include_router(time_travel.router)
 
     return app
 
