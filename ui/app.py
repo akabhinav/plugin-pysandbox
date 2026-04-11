@@ -7,6 +7,19 @@ import streamlit as st
 
 import os
 
+from features import (
+    page_cost,
+    page_spin,
+    tab_branch,
+    tab_chaos,
+    tab_devcontainer,
+    tab_fork,
+    tab_mcp,
+    tab_pyverify,
+    tab_recorder,
+    tab_time_travel,
+)
+
 API_BASE = os.getenv("API_BASE", "http://localhost:18080")
 
 
@@ -602,10 +615,18 @@ def page_sandbox_detail():
                 del st.session_state[f"seed_result_{sandbox_id}"]
                 st.rerun()
 
-    # Tabs
-    tab_plugins, tab_run, tab_monitor, tab_terminal, tab_quickstart, tab_timeline, tab_env, tab_dns, tab_tools, tab_settings = st.tabs([
+    # Tabs — the first 10 are the original ones; the last 8 are new features
+    # (chaos, pyverify, recorder, branch, time-travel, fork, mcp, devcontainer).
+    (
+        tab_plugins, tab_run, tab_monitor, tab_terminal,
+        tab_quickstart, tab_timeline, tab_env, tab_dns, tab_tools, tab_settings,
+        feat_chaos, feat_pyverify, feat_recorder, feat_branch,
+        feat_timetravel, feat_fork, feat_mcp, feat_devc,
+    ) = st.tabs([
         f"🔌 Plugins ({len(plugins)})", "▶️ Run Tool", "📊 Monitoring", "💻 Terminal",
-        "📖 Quickstart", "📜 Timeline", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools", "⚙️ Settings"
+        "📖 Quickstart", "📜 Timeline", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools", "⚙️ Settings",
+        "🎭 Chaos", "✅ pyverify", "⏺ Recorder", "🌿 Branch",
+        "⏮ Time-Travel", "🧬 Fork", "🤖 MCP", "📦 Devcontainer",
     ])
 
     # ── Plugins Tab ──
@@ -1173,6 +1194,26 @@ def page_sandbox_detail():
                     key="download_export",
                 )
 
+    # ── New feature tabs ──
+    # Each helper lives in features.py and takes the same shared api()
+    # callable so the main app routing logic stays tiny.
+    with feat_chaos:
+        tab_chaos(api, sandbox_id, plugins)
+    with feat_pyverify:
+        tab_pyverify(api, sandbox_id)
+    with feat_recorder:
+        tab_recorder(api, sandbox_id)
+    with feat_branch:
+        tab_branch(api, sandbox_id)
+    with feat_timetravel:
+        tab_time_travel(api, sandbox_id)
+    with feat_fork:
+        tab_fork(api, sandbox_id)
+    with feat_mcp:
+        tab_mcp(api, sandbox_id)
+    with feat_devc:
+        tab_devcontainer(api, sandbox_id)
+
 
 def page_catalog():
     """Browse all available plugins."""
@@ -1651,7 +1692,9 @@ def main():
             "templates": ("🚀", "Templates"),
             "catalog": ("📦", "Plugin Catalog"),
             "create_sandbox": ("➕", "New Sandbox"),
+            "spin": ("🔥", "Spin Ephemeral"),
             "containers": ("🐳", "Containers"),
+            "cost": ("💰", "Cost & Carbon"),
         }
 
         for key, (icon, label) in nav_items.items():
@@ -1697,6 +1740,10 @@ def main():
         page_templates()
     elif page == "import":
         page_import()
+    elif page == "spin":
+        page_spin(api)
+    elif page == "cost":
+        page_cost(api)
     else:
         page_dashboard()
 
