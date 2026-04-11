@@ -112,7 +112,7 @@ PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Create test table",
             "tool": "sql_execute",
-            "params": {"query": "CREATE TABLE IF NOT EXISTS _verify_test (id serial PRIMARY KEY, name text, created_at timestamp DEFAULT now()); INSERT INTO _verify_test (name) VALUES ('verify_ok');"},
+            "params": {"statement": "CREATE TABLE IF NOT EXISTS _verify_test (id serial PRIMARY KEY, name text, created_at timestamp DEFAULT now()); INSERT INTO _verify_test (name) VALUES ('verify_ok');"},
             "validate": _no_error,
         },
         {
@@ -124,7 +124,7 @@ PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Cleanup test table",
             "tool": "sql_execute",
-            "params": {"query": "DROP TABLE IF EXISTS _verify_test"},
+            "params": {"statement": "DROP TABLE IF EXISTS _verify_test"},
             "validate": _no_error,
         },
     ],
@@ -157,7 +157,7 @@ PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
         },
         {
             "name": "List keys",
-            "tool": "redis_list_keys",
+            "tool": "redis_scan",
             "params": {"pattern": "_verify*"},
             "validate": _contains("_verify_test"),
         },
@@ -246,7 +246,7 @@ CROSS_PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
             "name": "Postgres → write event data",
             "plugin": "postgres",
             "tool": "sql_execute",
-            "params": {"query": "CREATE TABLE IF NOT EXISTS events (id serial, source text, payload text); INSERT INTO events (source, payload) VALUES ('kafka', 'cross_plugin_verify');"},
+            "params": {"statement": "CREATE TABLE IF NOT EXISTS events (id serial, source text, payload text); INSERT INTO events (source, payload) VALUES ('kafka', 'cross_plugin_verify');"},
             "validate": _no_error,
         },
         {
@@ -281,7 +281,7 @@ CROSS_PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
             "name": "Cleanup",
             "plugin": "postgres",
             "tool": "sql_execute",
-            "params": {"query": "DROP TABLE IF EXISTS events"},
+            "params": {"statement": "DROP TABLE IF EXISTS events"},
             "validate": _no_error,
         },
     ],
@@ -327,7 +327,7 @@ CROSS_PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
             "name": "Postgres → create dataset table",
             "plugin": "postgres",
             "tool": "sql_execute",
-            "params": {"query": "CREATE TABLE IF NOT EXISTS ml_features (id serial, feature_1 float, feature_2 float, label int); INSERT INTO ml_features (feature_1, feature_2, label) VALUES (1.0, 2.0, 1), (3.0, 4.0, 0);"},
+            "params": {"statement": "CREATE TABLE IF NOT EXISTS ml_features (id serial, feature_1 float, feature_2 float, label int); INSERT INTO ml_features (feature_1, feature_2, label) VALUES (1.0, 2.0, 1), (3.0, 4.0, 0);"},
             "validate": _no_error,
         },
         {
@@ -348,7 +348,7 @@ CROSS_PLUGIN_CHECKS: dict[str, list[dict[str, Any]]] = {
             "name": "Cleanup",
             "plugin": "postgres",
             "tool": "sql_execute",
-            "params": {"query": "DROP TABLE IF EXISTS ml_features"},
+            "params": {"statement": "DROP TABLE IF EXISTS ml_features"},
             "validate": _no_error,
         },
     ],

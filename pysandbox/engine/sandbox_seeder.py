@@ -65,7 +65,7 @@ SEED_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Create users table",
             "tool": "sql_execute",
-            "params": {"query": """
+            "params": {"statement": """
                 CREATE TABLE IF NOT EXISTS users (
                     id serial PRIMARY KEY,
                     name text NOT NULL,
@@ -79,7 +79,7 @@ SEED_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Insert sample users",
             "tool": "sql_execute",
-            "params": {"query": """
+            "params": {"statement": """
                 INSERT INTO users (name, email, role) VALUES
                 ('Alice Johnson', 'alice@example.com', 'admin'),
                 ('Bob Smith', 'bob@example.com', 'user'),
@@ -93,7 +93,7 @@ SEED_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Create orders table",
             "tool": "sql_execute",
-            "params": {"query": """
+            "params": {"statement": """
                 CREATE TABLE IF NOT EXISTS orders (
                     id serial PRIMARY KEY,
                     user_id int REFERENCES users(id),
@@ -108,7 +108,7 @@ SEED_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Insert sample orders",
             "tool": "sql_execute",
-            "params": {"query": """
+            "params": {"statement": """
                 INSERT INTO orders (user_id, product, amount, status) VALUES
                 (1, 'Laptop Pro', 1299.99, 'completed'),
                 (1, 'Wireless Mouse', 49.99, 'completed'),
@@ -125,7 +125,7 @@ SEED_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Create analytics view",
             "tool": "sql_execute",
-            "params": {"query": """
+            "params": {"statement": """
                 CREATE OR REPLACE VIEW order_summary AS
                 SELECT u.name, u.email, count(o.id) as order_count,
                        coalesce(sum(o.amount), 0) as total_spent
@@ -139,13 +139,13 @@ SEED_DEFINITIONS: dict[str, list[dict[str, Any]]] = {
         {
             "name": "Create users table",
             "tool": "sql_execute",
-            "params": {"query": "CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100), email VARCHAR(100) UNIQUE, role VARCHAR(50) DEFAULT 'user', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"},
+            "params": {"statement": "CREATE TABLE IF NOT EXISTS users (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100), email VARCHAR(100) UNIQUE, role VARCHAR(50) DEFAULT 'user', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"},
             "rows": 0,
         },
         {
             "name": "Insert sample users",
             "tool": "sql_execute",
-            "params": {"query": "INSERT IGNORE INTO users (name, email, role) VALUES ('Alice Johnson', 'alice@example.com', 'admin'), ('Bob Smith', 'bob@example.com', 'user'), ('Charlie Brown', 'charlie@example.com', 'user')"},
+            "params": {"statement": "INSERT IGNORE INTO users (name, email, role) VALUES ('Alice Johnson', 'alice@example.com', 'admin'), ('Bob Smith', 'bob@example.com', 'user'), ('Charlie Brown', 'charlie@example.com', 'user')"},
             "rows": 3,
         },
     ],

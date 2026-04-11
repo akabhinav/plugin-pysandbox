@@ -16,7 +16,7 @@ def tool_registry():
         "sql_execute": "INSERT 0 1",
         "redis_set": "OK",
         "redis_get": "verify_ok\ncross_plugin_verify\ntrue",
-        "redis_list_keys": "_verify_test",
+        "redis_scan": "_verify_test",
         "kafka_create_topic": "Created topic",
         "kafka_list_topics": "_verify_test\ncross_verify",
         "kafka_produce": "OK",
