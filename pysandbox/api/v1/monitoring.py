@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
+from pysandbox.engine.cost_meter import CostMeter
+
 router = APIRouter(prefix="/v1/monitoring", tags=["monitoring"])
 
 
@@ -107,3 +109,71 @@ async def get_plugin_logs(sandbox_id: str, plugin_name: str, request: Request, t
 
     logs = await docker.get_logs(cid, tail=tail)
     return {"plugin_name": plugin_name, "logs": logs, "tail": tail}
+
+
+@router.get("/cost/{sandbox_id}")
+async def get_sandbox_cost(sandbox_id: str, request: Request):
+    """Estimate cost + CO₂ footprint for a single sandbox.
+
+    Uses live container stats when available; falls back to "assume 100%
+    of quota" otherwise. The returned `tip` field surfaces obvious waste
+    (e.g. multi-day sandbox at <10% CPU).
+    """
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
+    docker = request.app.state.docker_runtime
+    instance_repo = request.app.state.plugin_instance_repo
+    instances = await instance_repo.list_instances(sandbox_id)
+
+    stats = []
+    for inst in instances:
+        cid = inst.get("container_id")
+        if not cid:
+            continue
+        try:
+            cs = await docker.get_container_stats(cid)
+            cs["container_id"] = cid
+            stats.append(cs)
+        except Exception:
+            # Missing stats means we'll fall back to the "assumed" path
+            # in CostMeter — still useful, just less precise.
+            pass
+
+    meter: CostMeter = getattr(request.app.state, "cost_meter", None) or CostMeter()
+    return meter.estimate_sandbox(sandbox, instances, stats)
+
+
+@router.get("/cost")
+async def get_fleet_cost(request: Request):
+    """Fleet-wide cost rollup across every sandbox the engine knows about.
+
+    Sorted by USD descending so the top expense jumps out at a glance.
+    """
+    engine = request.app.state.sandbox_engine
+    docker = request.app.state.docker_runtime
+    instance_repo = request.app.state.plugin_instance_repo
+
+    sandboxes = await engine.list_all()
+    items = []
+    for sb in sandboxes:
+        if sb.get("status") == "destroyed":
+            continue
+        instances = await instance_repo.list_instances(sb["id"])
+        stats = []
+        for inst in instances:
+            cid = inst.get("container_id")
+            if not cid:
+                continue
+            try:
+                cs = await docker.get_container_stats(cid)
+                cs["container_id"] = cid
+                stats.append(cs)
+            except Exception:
+                pass
+        items.append({"sandbox": sb, "instances": instances, "stats": stats})
+
+    meter: CostMeter = getattr(request.app.state, "cost_meter", None) or CostMeter()
+    return meter.estimate_fleet(items)

@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from pysandbox.engine.devcontainer_export import DevcontainerExporter
 from pysandbox.engine.sandbox_export import SandboxExporter
 
 router = APIRouter(prefix="/v1/export", tags=["export"])
@@ -61,3 +62,20 @@ async def validate_import(request: Request):
     body = await request.json()
     errors = SandboxExporter.validate_import(body)
     return {"valid": len(errors) == 0, "errors": errors}
+
+
+@router.get("/{sandbox_id}/devcontainer")
+async def export_devcontainer(sandbox_id: str, request: Request):
+    """Export sandbox as a VS Code devcontainer bundle.
+
+    Returns both `devcontainer.json` and `docker-compose.yml` as JSON,
+    so the client can write them into `.devcontainer/` in the user's repo
+    and get an identical stack on "Reopen in Container".
+    """
+    engine = request.app.state.sandbox_engine
+    sandbox = await engine.get(sandbox_id)
+    if not sandbox:
+        raise HTTPException(status_code=404, detail="Sandbox not found")
+
+    instances = await engine._plugins._repo.list_instances(sandbox_id)
+    return DevcontainerExporter.export_bundle(sandbox, instances)

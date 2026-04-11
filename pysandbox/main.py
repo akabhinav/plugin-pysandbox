@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from pysandbox.agent.agent_runtime import AgentRuntime
 from pysandbox.agent.tool_registry import AgentToolRegistry
 from pysandbox.api.v1 import (
-    agent, batch, catalog, containers, export, health,
+    agent, batch, catalog, chaos, containers, export, health,
     monitoring, plugins, sandboxes, templates, terminal, timeline, ttl, verify,
 )
 from pysandbox.config.settings import get_settings
@@ -22,6 +22,8 @@ from pysandbox.engine.plugin_engine import PluginEngine
 from pysandbox.engine.resource_guard import ResourceGuard
 from pysandbox.engine.sandbox_engine import SandboxEngine
 from pysandbox.engine.activity_timeline import ActivityTimeline
+from pysandbox.engine.chaos import ChaosEngine
+from pysandbox.engine.cost_meter import CostMeter
 from pysandbox.engine.sandbox_ttl import SandboxTTLManager
 from pysandbox.engine.sandbox_seeder import SandboxSeeder
 from pysandbox.engine.sandbox_verify import SandboxVerifier
@@ -68,6 +70,8 @@ async def lifespan(app: FastAPI):
     template_registry = TemplateRegistry()
     activity_timeline = ActivityTimeline()
     ttl_manager = SandboxTTLManager()
+    cost_meter = CostMeter()
+    chaos_engine = ChaosEngine(docker_runtime=docker_runtime, instance_repo=instance_repo)
 
     # Wire event bus subscriptions
     event_bus.subscribe("plugin.installed", tool_registry.on_plugin_installed)
@@ -126,6 +130,8 @@ async def lifespan(app: FastAPI):
     app.state.ttl_manager = ttl_manager
     app.state.sandbox_verifier = sandbox_verifier
     app.state.sandbox_seeder = sandbox_seeder
+    app.state.cost_meter = cost_meter
+    app.state.chaos_engine = chaos_engine
 
     # Wire TTL manager to sandbox engine and start background checker
     ttl_manager.set_engine(sandbox_engine)
@@ -181,6 +187,7 @@ def create_app() -> FastAPI:
     app.include_router(terminal.router)
     app.include_router(verify.router)
     app.include_router(verify.quickstart_router)
+    app.include_router(chaos.router)
 
     return app
 
