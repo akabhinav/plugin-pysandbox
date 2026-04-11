@@ -10,9 +10,9 @@ from fastapi import FastAPI
 from pysandbox.agent.agent_runtime import AgentRuntime
 from pysandbox.agent.tool_registry import AgentToolRegistry
 from pysandbox.api.v1 import (
-    agent, batch, branching, catalog, chaos, containers, ephemeral, export, health,
-    monitoring, plugins, pyverify, recorder, sandboxes, templates, terminal, time_travel,
-    timeline, ttl, verify,
+    agent, batch, branching, catalog, chaos, containers, ephemeral, export,
+    fork_production, health, mcp, monitoring, plugins, pyverify, recorder, sandboxes,
+    templates, terminal, time_travel, timeline, ttl, verify,
 )
 from pysandbox.config.settings import get_settings
 from pysandbox.db.repos.plugin_instance_repo import PluginInstanceRepo
@@ -219,6 +219,8 @@ def create_app() -> FastAPI:
     app.include_router(ephemeral.router)
     app.include_router(branching.router)
     app.include_router(time_travel.router)
+    app.include_router(fork_production.router)
+    app.include_router(mcp.router)
 
     return app
 
