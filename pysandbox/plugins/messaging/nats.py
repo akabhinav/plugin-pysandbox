@@ -46,6 +46,7 @@ class NATSPlugin(PluginDefinition):
             "command": [
                 "--jetstream",
                 "--store_dir", "/data",
+                "--http_port", "8222",
                 "--user", credentials["user"],
                 "--pass", credentials["password"],
             ],
