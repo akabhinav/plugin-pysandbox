@@ -22,6 +22,10 @@ class ClickHousePlugin(PluginDefinition):
                 "CLICKHOUSE_DB": credentials["database"],
                 "CLICKHOUSE_USER": credentials["user"],
                 "CLICKHOUSE_PASSWORD": credentials["password"],
+                # Allow the `default` user with no password so the HTTP
+                # Play UI at :8123 opens without a login prompt from the
+                # browser Quick Access link.
+                "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT": "1",
             },
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/var/lib/clickhouse", "mode": "rw"},

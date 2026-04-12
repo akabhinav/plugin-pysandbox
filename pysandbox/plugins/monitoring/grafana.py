@@ -29,6 +29,12 @@ class GrafanaPlugin(PluginDefinition):
                 "GF_SECURITY_ADMIN_USER": credentials["user"],
                 "GF_SECURITY_ADMIN_PASSWORD": credentials["password"],
                 "GF_USERS_ALLOW_SIGN_UP": "false",
+                # Enable anonymous access so the browser Quick Access link
+                # opens straight into a working dashboard without a login
+                # prompt. The anonymous viewer is given Admin role because
+                # this is a disposable dev sandbox — not production.
+                "GF_AUTH_ANONYMOUS_ENABLED": "true",
+                "GF_AUTH_ANONYMOUS_ORG_ROLE": "Admin",
             },
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/var/lib/grafana", "mode": "rw"},

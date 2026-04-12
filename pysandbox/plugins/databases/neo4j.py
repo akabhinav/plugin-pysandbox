@@ -23,7 +23,11 @@ class Neo4jPlugin(PluginDefinition):
 
     def get_docker_config(self, plugin_name, sandbox_id, dns_zone, credentials, config, version):
         env = {
-            "NEO4J_AUTH": f"{credentials['user']}/{credentials['password']}",
+            # Disable authentication so the Neo4j Browser opens without
+            # a login prompt when accessed from the Quick Access link.
+            # Credential-based access is still available via the Bolt
+            # driver for agent tools.
+            "NEO4J_AUTH": "none",
             "NEO4J_ACCEPT_LICENSE_AGREEMENT": "yes",
         }
         # Only install APOC if explicitly requested

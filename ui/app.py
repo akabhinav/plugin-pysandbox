@@ -506,11 +506,14 @@ def page_sandbox_detail():
         "vault": 8200,       # Web UI at /ui/
         "nats": 8222,        # Monitoring dashboard on 8222, not client on 4222
     }
-    web_links = []
+    # Fetch env vars once (for credential display) — only when plugins are installed.
+    env_data = api("GET", f"/v1/sandboxes/{sandbox_id}/env") if plugins else None
+    env_vars = (env_data or {}).get("env", {})
+
+    web_links = []  # (name, url, plugin_id, cred_hint)
     for p in plugins:
         pid = p.get("plugin_id", "")
         host_ports_map = p.get("host_ports", {})
-        # For plugins with a specific web UI port, use that mapping
         if pid in WEB_UI_PORTS and host_ports_map:
             hp = host_ports_map.get(str(WEB_UI_PORTS[pid])) or host_ports_map.get(WEB_UI_PORTS[pid])
         else:
@@ -518,37 +521,63 @@ def page_sandbox_detail():
         if hp and pid in WEB_PLUGINS:
             url = f"http://localhost:{hp}"
             display_url = url
+            cred_hint = ""  # shown below the link for plugins that need login
+
+            # ── Per-plugin URL tweaks + credential hints ──
             if pid == "jupyter":
-                env_data = api("GET", f"/v1/sandboxes/{sandbox_id}/env?reveal=JUPYTER_TOKEN")
-                if env_data and env_data.get("env"):
-                    token = env_data["env"].get("JUPYTER_TOKEN", "")
-                    if token and token != "***":
-                        display_url = f"{url}?token={token}"
+                token = env_vars.get("JUPYTER_TOKEN", "")
+                if token and token != "***":
+                    display_url = f"{url}?token={token}"
             elif pid == "vault":
                 display_url = f"{url}/ui/"
+                token = env_vars.get("VAULT_TOKEN", "")
+                if token and token != "***":
+                    cred_hint = f"Token: <code>{token}</code>"
             elif pid == "elasticsearch":
                 display_url = f"{url}/_cat/"
             elif pid == "nats":
                 display_url = f"{url}/varz"
-            web_links.append((p.get("plugin_name", pid), display_url, pid))
+            elif pid == "minio":
+                ak = env_vars.get("MINIO_ACCESS_KEY", env_vars.get("AWS_ACCESS_KEY_ID", ""))
+                sk = env_vars.get("MINIO_SECRET_KEY", env_vars.get("AWS_SECRET_ACCESS_KEY", ""))
+                if ak and ak != "***":
+                    cred_hint = f"User: <code>{ak}</code> / Pass: <code>{sk}</code>"
+            elif pid == "rabbitmq":
+                u = env_vars.get("RABBITMQ_USER", "")
+                pw = env_vars.get("RABBITMQ_PASSWORD", "")
+                if u and u != "***":
+                    cred_hint = f"User: <code>{u}</code> / Pass: <code>{pw}</code>"
+            elif pid == "dremio":
+                u = env_vars.get("DREMIO_USER", "")
+                pw = env_vars.get("DREMIO_PASSWORD", "")
+                if u and u != "***":
+                    cred_hint = f"User: <code>{u}</code> / Pass: <code>{pw}</code>"
+            elif pid == "clickhouse":
+                display_url = f"{url}/play"
+            # grafana, neo4j, prometheus, jaeger, spark → no creds needed (auth disabled)
+
+            web_links.append((p.get("plugin_name", pid), display_url, pid, cred_hint))
 
     if web_links:
-        st.markdown('<div class="section-header">Quick Access</div>', unsafe_allow_html=True)
-        # Chunk into rows of 4 to avoid too-narrow columns
+        st.markdown('<div class="section-header">Quick Access — Open in Browser</div>', unsafe_allow_html=True)
         cols_per_row = min(4, len(web_links))
         for row_start in range(0, len(web_links), cols_per_row):
             row_items = web_links[row_start:row_start + cols_per_row]
             link_cols = st.columns(cols_per_row)
-            for i, (name, url, pid) in enumerate(row_items):
+            for i, (name, url, pid, cred) in enumerate(row_items):
                 with link_cols[i]:
+                    cred_html = f'<div style="font-size:0.72rem; color:#aaa; margin-top:4px;">{cred}</div>' if cred else ""
                     st.markdown(f"""
-                    <a href="{url}" target="_blank" style="
-                        display:block; text-align:center; padding:12px 16px;
-                        background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                        color:white; border-radius:10px; text-decoration:none;
-                        font-weight:700; font-size:0.9rem;
-                        box-shadow: 0 4px 12px rgba(102,126,234,0.3);
-                    ">🔗 Open {name}</a>
+                    <div style="text-align:center;">
+                        <a href="{url}" target="_blank" style="
+                            display:block; padding:12px 16px;
+                            background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            color:white; border-radius:10px; text-decoration:none;
+                            font-weight:700; font-size:0.9rem;
+                            box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+                        ">🔗 Open {name}</a>
+                        {cred_html}
+                    </div>
                     """, unsafe_allow_html=True)
 
     # ── Verify / Seed / Quickstart Action Bar ──

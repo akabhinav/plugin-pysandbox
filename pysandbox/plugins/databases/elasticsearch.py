@@ -43,15 +43,18 @@ class ElasticsearchPlugin(PluginDefinition):
             "image": f"docker.elastic.co/elasticsearch/elasticsearch:{version}",
             "environment": {
                 "discovery.type": "single-node",
-                "ELASTIC_PASSWORD": credentials["password"],
-                "xpack.security.enabled": "true",
+                # Disable X-Pack security so the REST API (/_cat/, /_search)
+                # is accessible from the browser Quick Access link without
+                # basic-auth credentials. Agent tools also become simpler
+                # because they don't need to pass -u elastic:password.
+                "xpack.security.enabled": "false",
                 "ES_JAVA_OPTS": config.get("java_opts", "-Xms512m -Xmx512m"),
             },
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/usr/share/elasticsearch/data", "mode": "rw"},
             },
             "healthcheck": {
-                "test": ["CMD-SHELL", f"curl -sf -u elastic:{credentials['password']} http://localhost:9200/_cluster/health"],
+                "test": ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health"],
                 "interval": 10_000_000_000,
                 "timeout": 5_000_000_000,
                 "retries": 40,
@@ -61,65 +64,62 @@ class ElasticsearchPlugin(PluginDefinition):
 
     def get_env_vars(self, plugin_name, dns_zone, credentials, config):
         host = f"{plugin_name}.{dns_zone}"
-        url = f"http://elastic:{credentials['password']}@{host}:9200"
         return {
-            "ELASTICSEARCH_URL": url,
+            "ELASTICSEARCH_URL": f"http://{host}:9200",
             "ELASTICSEARCH_HOST": host,
             "ELASTICSEARCH_PORT": "9200",
-            "ELASTICSEARCH_PASSWORD": credentials["password"],
         }
 
     def get_agent_tools(self, plugin_name, dns_zone, credentials, config,
                         container_id="", docker_runtime=None):
-        password = credentials["password"]
-        auth = f"-u elastic:{password}"
+        # With xpack.security.enabled=false, no auth flag is needed.
 
-        def _make_search(cid, dr, auth_flag):
+        def _make_search(cid, dr):
             async def handler(params: dict) -> str:
                 index = params["index"]
                 query = _quote(json.dumps(params["query"]))
-                cmd = f"curl -sf {auth_flag} -H 'Content-Type: application/json' 'http://localhost:9200/{index}/_search' -d '{query}'"
+                cmd = f"curl -sf -H 'Content-Type: application/json' 'http://localhost:9200/{index}/_search' -d '{query}'"
                 return await dr.exec_in_container(cid, cmd)
             return handler
 
-        def _make_index_doc(cid, dr, auth_flag):
+        def _make_index_doc(cid, dr):
             async def handler(params: dict) -> str:
                 index = params["index"]
                 doc = _quote(json.dumps(params["document"]))
-                cmd = f"curl -sf {auth_flag} -H 'Content-Type: application/json' -X POST 'http://localhost:9200/{index}/_doc' -d '{doc}'"
+                cmd = f"curl -sf -H 'Content-Type: application/json' -X POST 'http://localhost:9200/{index}/_doc' -d '{doc}'"
                 return await dr.exec_in_container(cid, cmd)
             return handler
 
-        def _make_delete_index(cid, dr, auth_flag):
+        def _make_delete_index(cid, dr):
             async def handler(params: dict) -> str:
                 index = params["index"]
-                cmd = f"curl -sf {auth_flag} -X DELETE 'http://localhost:9200/{index}'"
+                cmd = f"curl -sf -X DELETE 'http://localhost:9200/{index}'"
                 return await dr.exec_in_container(cid, cmd)
             return handler
 
-        def _make_list_indices(cid, dr, auth_flag):
+        def _make_list_indices(cid, dr):
             async def handler(params: dict) -> str:
-                cmd = f"curl -sf {auth_flag} 'http://localhost:9200/_cat/indices?v'"
+                cmd = f"curl -sf 'http://localhost:9200/_cat/indices?v'"
                 return await dr.exec_in_container(cid, cmd)
             return handler
 
-        def _make_cluster_health(cid, dr, auth_flag):
+        def _make_cluster_health(cid, dr):
             async def handler(params: dict) -> str:
-                cmd = f"curl -sf {auth_flag} 'http://localhost:9200/_cluster/health?pretty'"
+                cmd = f"curl -sf 'http://localhost:9200/_cluster/health?pretty'"
                 return await dr.exec_in_container(cid, cmd)
             return handler
 
         return [
             AgentTool("es_search", "Search documents", SEARCH_SCHEMA,
-                      _make_search(container_id, docker_runtime, auth)),
+                      _make_search(container_id, docker_runtime)),
             AgentTool("es_index", "Index a document", INDEX_DOC_SCHEMA,
-                      _make_index_doc(container_id, docker_runtime, auth)),
+                      _make_index_doc(container_id, docker_runtime)),
             AgentTool("es_delete_index", "Delete an index", INDEX_NAME_SCHEMA,
-                      _make_delete_index(container_id, docker_runtime, auth)),
+                      _make_delete_index(container_id, docker_runtime)),
             AgentTool("es_list_indices", "List all indices", EMPTY_SCHEMA,
-                      _make_list_indices(container_id, docker_runtime, auth)),
+                      _make_list_indices(container_id, docker_runtime)),
             AgentTool("es_cluster_health", "Get cluster health", EMPTY_SCHEMA,
-                      _make_cluster_health(container_id, docker_runtime, auth)),
+                      _make_cluster_health(container_id, docker_runtime)),
         ]
 
     def generate_credentials(self, config):
