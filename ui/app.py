@@ -757,7 +757,14 @@ def page_sandbox_detail():
                 if st.session_state.get(tool_key):
                     with st.expander(f"Tools for {p.get('plugin_name', p.get('name', ''))}", expanded=True):
                         for t in st.session_state[tool_key]:
-                            st.markdown(f"- **`{t['name']}`** — {t.get('description', '')}")
+                            # The per-plugin tools endpoint returns a flat
+                            # list of tool name strings, not dicts. The
+                            # all-tools endpoint returns dicts with name +
+                            # description. Handle both shapes.
+                            if isinstance(t, dict):
+                                st.markdown(f"- **`{t['name']}`** — {t.get('description', '')}")
+                            else:
+                                st.markdown(f"- **`{t}`**")
                         if st.button("Close", key=f"close_{tool_key}"):
                             del st.session_state[tool_key]
                             st.rerun()

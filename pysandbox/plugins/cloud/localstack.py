@@ -28,15 +28,22 @@ class LocalStackPlugin(PluginDefinition):
         services = ",".join(config.get("services", [
             "s3", "sqs", "sns", "lambda", "dynamodb", "secretsmanager", "ses",
         ]))
+        env = {
+            "SERVICES": services,
+            "DEFAULT_REGION": config.get("region", "us-east-1"),
+            "AWS_DEFAULT_REGION": config.get("region", "us-east-1"),
+            "DEBUG": "0",
+        }
+        # LocalStack v3+ requires a paid license (LOCALSTACK_AUTH_TOKEN).
+        # If the user supplies one via config, pass it through so paid
+        # features work. Otherwise the default version (1.4.0) is the
+        # last free community release and doesn't need a token.
+        auth_token = config.get("auth_token", "")
+        if auth_token:
+            env["LOCALSTACK_AUTH_TOKEN"] = auth_token
         return {
-            "image": f"localstack/localstack:{version}",
-            "environment": {
-                "SERVICES": services,
-                "DEFAULT_REGION": config.get("region", "us-east-1"),
-                "AWS_DEFAULT_REGION": config.get("region", "us-east-1"),
-                "DEBUG": "0",
-                "LOCALSTACK_ACKNOWLEDGE_ACCOUNT_REQUIREMENT": "1",
-            },
+            "image": config.get("image", f"localstack/localstack:{version}"),
+            "environment": env,
             "volumes": {
                 f"pysb-{sandbox_id[:8]}-{plugin_name}": {"bind": "/var/lib/localstack", "mode": "rw"},
             },

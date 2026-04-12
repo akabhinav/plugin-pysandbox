@@ -60,11 +60,24 @@ async def stop_recording(sandbox_id: str, request: Request):
 
 @router.get("/{sandbox_id}")
 async def get_recording(sandbox_id: str, request: Request):
-    """Return the full in-memory recording as JSON."""
+    """Return the in-memory recording, or an idle stub if none exists.
+
+    Returning a stub rather than 404 prevents the UI from showing
+    a spurious error toast every time the Recorder tab loads on a
+    sandbox that hasn't started a recording yet.
+    """
     await _ensure_sandbox(request, sandbox_id)
     data = _recorder(request).to_dict(sandbox_id)
     if data is None:
-        raise HTTPException(status_code=404, detail="No recording for this sandbox")
+        return {
+            "sandbox_id": sandbox_id,
+            "name": None,
+            "started_at": None,
+            "stopped_at": None,
+            "active": False,
+            "call_count": 0,
+            "calls": [],
+        }
     return data
 
 
