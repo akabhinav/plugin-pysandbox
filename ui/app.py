@@ -14,6 +14,7 @@ from features import (
     tab_chaos,
     tab_devcontainer,
     tab_fork,
+    tab_localstack,
     tab_mcp,
     tab_pyverify,
     tab_recorder,
@@ -644,19 +645,33 @@ def page_sandbox_detail():
                 del st.session_state[f"seed_result_{sandbox_id}"]
                 st.rerun()
 
-    # Tabs — the first 10 are the original ones; the last 8 are new features
-    # (chaos, pyverify, recorder, branch, time-travel, fork, mcp, devcontainer).
+    # Tabs — the first 10 are the original ones; the remaining are new features.
+    # LocalStack tab only shows if a localstack plugin is installed.
+    has_localstack = any(p.get("plugin_id") == "localstack" for p in plugins)
+    extra_tab_labels = [
+        "🎭 Chaos", "✅ pyverify", "⏺ Recorder", "🌿 Branch",
+        "⏮ Time-Travel", "🧬 Fork", "🤖 MCP", "📦 Devcontainer",
+    ]
+    if has_localstack:
+        extra_tab_labels.append("☁️ LocalStack")
     (
         tab_plugins, tab_run, tab_monitor, tab_terminal,
         tab_quickstart, tab_timeline, tab_env, tab_dns, tab_tools, tab_settings,
-        feat_chaos, feat_pyverify, feat_recorder, feat_branch,
-        feat_timetravel, feat_fork, feat_mcp, feat_devc,
+        *extra_tabs,
     ) = st.tabs([
         f"🔌 Plugins ({len(plugins)})", "▶️ Run Tool", "📊 Monitoring", "💻 Terminal",
         "📖 Quickstart", "📜 Timeline", "🔑 Environment", "🌐 DNS", "🛠️ Agent Tools", "⚙️ Settings",
-        "🎭 Chaos", "✅ pyverify", "⏺ Recorder", "🌿 Branch",
-        "⏮ Time-Travel", "🧬 Fork", "🤖 MCP", "📦 Devcontainer",
-    ])
+    ] + extra_tab_labels)
+    # Unpack extra tabs by name so the rest of the code stays readable.
+    feat_chaos = extra_tabs[0]
+    feat_pyverify = extra_tabs[1]
+    feat_recorder = extra_tabs[2]
+    feat_branch = extra_tabs[3]
+    feat_timetravel = extra_tabs[4]
+    feat_fork = extra_tabs[5]
+    feat_mcp = extra_tabs[6]
+    feat_devc = extra_tabs[7]
+    feat_localstack = extra_tabs[8] if has_localstack else None
 
     # ── Plugins Tab ──
     with tab_plugins:
@@ -1249,6 +1264,9 @@ def page_sandbox_detail():
         tab_mcp(api, sandbox_id)
     with feat_devc:
         tab_devcontainer(api, sandbox_id)
+    if feat_localstack is not None:
+        with feat_localstack:
+            tab_localstack(api, sandbox_id)
 
 
 def page_catalog():

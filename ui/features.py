@@ -675,3 +675,268 @@ def tab_devcontainer(api: API_FN, sandbox_id: str) -> None:
         "💡 Drop both files into `.devcontainer/` in your repo, then "
         "**Reopen in Container** in VS Code."
     )
+
+
+# ── Feature 11: LocalStack Dashboard ──────────────────────────────────────
+
+
+def tab_localstack(api: API_FN, sandbox_id: str) -> None:
+    """LocalStack AWS services dashboard — browse S3, SQS, SNS, DynamoDB,
+    Secrets Manager; create/delete resources; see which services are running."""
+
+    st.markdown("#### ☁️ LocalStack — AWS Services")
+
+    # ── Health / Running Services ─────────────────────────────────────
+    st.markdown("##### Running Services")
+    health_raw = api(
+        "POST",
+        f"/v1/sandboxes/{sandbox_id}/agent/tools/s3_list_buckets/execute",
+        json={"params": {}},
+    )
+    # Use terminal exec to hit the LocalStack health endpoint directly
+    health = api(
+        "POST",
+        f"/v1/terminal/{sandbox_id}/localstack",
+        json={"command": "curl -sf http://localhost:4566/_localstack/health 2>/dev/null || echo '{}'"},
+    )
+    if health and health.get("output"):
+        try:
+            h = json.loads(health["output"])
+            services = h.get("services", {})
+            if services:
+                cols = st.columns(4)
+                for i, (svc, status) in enumerate(sorted(services.items())):
+                    with cols[i % 4]:
+                        icon = "🟢" if status in ("running", "available") else "🔴"
+                        st.markdown(f"{icon} **{svc}**")
+            else:
+                st.info("No service status available")
+        except (json.JSONDecodeError, TypeError):
+            st.warning("Could not parse LocalStack health response")
+    else:
+        st.info("Could not reach LocalStack health endpoint")
+
+    st.divider()
+
+    # ── S3 Buckets ────────────────────────────────────────────────────
+    st.markdown("##### 🪣 S3 Buckets")
+    col_s3_1, col_s3_2 = st.columns([3, 1])
+    with col_s3_2:
+        new_bucket = st.text_input("New bucket name", placeholder="my-data", key="ls_new_bucket")
+        if st.button("➕ Create Bucket", key="ls_create_bucket", use_container_width=True):
+            if new_bucket:
+                result = api(
+                    "POST",
+                    f"/v1/terminal/{sandbox_id}/localstack",
+                    json={"command": f"awslocal s3 mb s3://{new_bucket} 2>&1"},
+                )
+                if result:
+                    st.toast(f"Created bucket: {new_bucket}", icon="🪣")
+                    time.sleep(0.3)
+                    st.rerun()
+    with col_s3_1:
+        buckets_result = api(
+            "POST",
+            f"/v1/sandboxes/{sandbox_id}/agent/tools/s3_list_buckets/execute",
+            json={"params": {}},
+        )
+        bucket_output = (buckets_result or {}).get("result", "")
+        if bucket_output and bucket_output.strip():
+            for line in bucket_output.strip().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                # awslocal output: "2024-01-15 10:00:00 bucket-name" or just "bucket-name"
+                parts = line.rsplit(None, 1)
+                bname = parts[-1] if parts else line
+                bc1, bc2, bc3 = st.columns([3, 1, 1])
+                bc1.markdown(f"🪣 **{bname}**")
+                if bc2.button("📂 List", key=f"ls_list_{bname}"):
+                    objs = api(
+                        "POST",
+                        f"/v1/sandboxes/{sandbox_id}/agent/tools/s3_list/execute",
+                        json={"params": {"bucket": bname}},
+                    )
+                    if objs:
+                        st.code(objs.get("result", ""), language="text")
+                if bc3.button("🗑️", key=f"ls_del_bucket_{bname}"):
+                    api(
+                        "POST",
+                        f"/v1/terminal/{sandbox_id}/localstack",
+                        json={"command": f"awslocal s3 rb s3://{bname} --force 2>&1"},
+                    )
+                    st.toast(f"Deleted bucket: {bname}", icon="🗑️")
+                    time.sleep(0.3)
+                    st.rerun()
+        else:
+            st.caption("No buckets yet")
+
+    st.divider()
+
+    # ── SQS Queues ────────────────────────────────────────────────────
+    st.markdown("##### 📬 SQS Queues")
+    col_sqs_1, col_sqs_2 = st.columns([3, 1])
+    with col_sqs_2:
+        new_queue = st.text_input("New queue name", placeholder="my-queue", key="ls_new_queue")
+        if st.button("➕ Create Queue", key="ls_create_queue", use_container_width=True):
+            if new_queue:
+                api(
+                    "POST",
+                    f"/v1/sandboxes/{sandbox_id}/agent/tools/sqs_create_queue/execute",
+                    json={"params": {"queue_name": new_queue}},
+                )
+                st.toast(f"Created queue: {new_queue}", icon="📬")
+                time.sleep(0.3)
+                st.rerun()
+    with col_sqs_1:
+        queues_result = api(
+            "POST",
+            f"/v1/terminal/{sandbox_id}/localstack",
+            json={"command": "awslocal sqs list-queues --output text 2>/dev/null || echo ''"},
+        )
+        queue_output = (queues_result or {}).get("output", "").strip()
+        if queue_output:
+            for line in queue_output.splitlines():
+                line = line.strip()
+                if not line or line.startswith("QUEUE"):
+                    continue
+                # Extract queue name from URL or raw line
+                qname = line.rsplit("/", 1)[-1] if "/" in line else line
+                qc1, qc2, qc3 = st.columns([3, 1, 1])
+                qc1.markdown(f"📬 **{qname}**")
+                if qc2.button("📨 Send", key=f"ls_send_{qname}"):
+                    st.session_state[f"ls_sqs_send_target"] = qname
+                if qc3.button("🗑️", key=f"ls_del_queue_{qname}"):
+                    api(
+                        "POST",
+                        f"/v1/terminal/{sandbox_id}/localstack",
+                        json={"command": f"awslocal sqs delete-queue --queue-url http://localhost:4566/000000000000/{qname} 2>&1"},
+                    )
+                    st.toast(f"Deleted queue: {qname}", icon="🗑️")
+                    time.sleep(0.3)
+                    st.rerun()
+        else:
+            st.caption("No queues yet")
+
+    # SQS send form
+    send_target = st.session_state.get("ls_sqs_send_target")
+    if send_target:
+        with st.form(f"sqs_send_form_{send_target}"):
+            st.markdown(f"**Send message to {send_target}**")
+            msg_body = st.text_area("Message body", key="ls_sqs_msg")
+            if st.form_submit_button("📨 Send Message"):
+                api(
+                    "POST",
+                    f"/v1/sandboxes/{sandbox_id}/agent/tools/sqs_send/execute",
+                    json={"params": {"queue_name": send_target, "message": msg_body}},
+                )
+                st.toast("Message sent!", icon="📨")
+                del st.session_state["ls_sqs_send_target"]
+                st.rerun()
+
+    st.divider()
+
+    # ── SNS Topics ────────────────────────────────────────────────────
+    st.markdown("##### 📢 SNS Topics")
+    col_sns_1, col_sns_2 = st.columns([3, 1])
+    with col_sns_2:
+        new_topic = st.text_input("New topic name", placeholder="notifications", key="ls_new_topic")
+        if st.button("➕ Create Topic", key="ls_create_topic", use_container_width=True):
+            if new_topic:
+                api(
+                    "POST",
+                    f"/v1/sandboxes/{sandbox_id}/agent/tools/sns_create_topic/execute",
+                    json={"params": {"topic_name": new_topic}},
+                )
+                st.toast(f"Created topic: {new_topic}", icon="📢")
+                time.sleep(0.3)
+                st.rerun()
+    with col_sns_1:
+        topics_result = api(
+            "POST",
+            f"/v1/terminal/{sandbox_id}/localstack",
+            json={"command": "awslocal sns list-topics --output text 2>/dev/null || echo ''"},
+        )
+        topic_output = (topics_result or {}).get("output", "").strip()
+        if topic_output:
+            for line in topic_output.splitlines():
+                line = line.strip()
+                if not line or line.startswith("TOPICS"):
+                    continue
+                tname = line.rsplit(":", 1)[-1] if ":" in line else line
+                st.markdown(f"📢 **{tname}**")
+        else:
+            st.caption("No topics yet")
+
+    st.divider()
+
+    # ── DynamoDB Tables ───────────────────────────────────────────────
+    st.markdown("##### 🗃️ DynamoDB Tables")
+    tables_result = api(
+        "POST",
+        f"/v1/terminal/{sandbox_id}/localstack",
+        json={"command": "awslocal dynamodb list-tables --output text 2>/dev/null || echo ''"},
+    )
+    table_output = (tables_result or {}).get("output", "").strip()
+    if table_output:
+        for line in table_output.splitlines():
+            line = line.strip()
+            if not line or line.startswith("TABLENAMES"):
+                continue
+            st.markdown(f"🗃️ **{line}**")
+    else:
+        st.caption("No tables yet")
+
+    st.divider()
+
+    # ── Secrets Manager ───────────────────────────────────────────────
+    st.markdown("##### 🔐 Secrets Manager")
+    col_sec_1, col_sec_2 = st.columns([3, 1])
+    with col_sec_2:
+        with st.form("ls_secret_form"):
+            sec_name = st.text_input("Secret name", placeholder="db/password", key="ls_sec_name")
+            sec_value = st.text_input("Secret value", type="password", key="ls_sec_val")
+            if st.form_submit_button("🔐 Store Secret"):
+                if sec_name and sec_value:
+                    api(
+                        "POST",
+                        f"/v1/sandboxes/{sandbox_id}/agent/tools/secretsmanager_put/execute",
+                        json={"params": {"name": sec_name, "value": sec_value}},
+                    )
+                    st.toast(f"Stored secret: {sec_name}", icon="🔐")
+                    time.sleep(0.3)
+                    st.rerun()
+    with col_sec_1:
+        secrets_result = api(
+            "POST",
+            f"/v1/terminal/{sandbox_id}/localstack",
+            json={"command": "awslocal secretsmanager list-secrets --output text 2>/dev/null || echo ''"},
+        )
+        sec_output = (secrets_result or {}).get("output", "").strip()
+        if sec_output and "None" not in sec_output:
+            for line in sec_output.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                st.markdown(f"🔐 {line}")
+        else:
+            st.caption("No secrets stored yet")
+
+    st.divider()
+
+    # ── Quick AWS CLI ─────────────────────────────────────────────────
+    st.markdown("##### 💻 AWS CLI (awslocal)")
+    cmd = st.text_input(
+        "Run any awslocal command",
+        placeholder="awslocal s3 ls  |  awslocal sqs list-queues  |  awslocal lambda list-functions",
+        key="ls_awscli",
+    )
+    if st.button("▶️ Run", key="ls_run_cmd", use_container_width=True):
+        if cmd:
+            result = api(
+                "POST",
+                f"/v1/terminal/{sandbox_id}/localstack",
+                json={"command": cmd},
+            )
+            if result:
+                st.code(result.get("output", ""), language="text")
