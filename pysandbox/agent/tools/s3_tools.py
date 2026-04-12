@@ -334,3 +334,228 @@ def make_sm_put(container_id: str, docker_runtime, endpoint_url: str, access_key
         cmd = f"{env} aws secretsmanager create-secret --name {secret_id} --secret-string '{value}' --endpoint-url {endpoint_url} || {env} aws secretsmanager put-secret-value --secret-id {secret_id} --secret-string '{value}' --endpoint-url {endpoint_url}"
         return await docker_runtime.exec_in_container(container_id, cmd)
     return handler
+
+
+# ── Kinesis ───────────────────────────────────────────────────────────
+
+KINESIS_CREATE_SCHEMA = {
+    "type": "object",
+    "properties": {"stream_name": {"type": "string"}, "shard_count": {"type": "integer", "default": 1}},
+    "required": ["stream_name"],
+}
+KINESIS_PUT_SCHEMA = {
+    "type": "object",
+    "properties": {"stream_name": {"type": "string"}, "data": {"type": "string"}, "partition_key": {"type": "string", "default": "pk"}},
+    "required": ["stream_name", "data"],
+}
+KINESIS_LIST_SCHEMA = {"type": "object", "properties": {}}
+
+def make_kinesis_create(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws kinesis create-stream --stream-name {params['stream_name']} --shard-count {params.get('shard_count',1)} --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_kinesis_put(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        data = _quote(params["data"])
+        pk = params.get("partition_key", "pk")
+        cmd = f"{env} aws kinesis put-record --stream-name {params['stream_name']} --data '{data}' --partition-key {pk} --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_kinesis_list(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws kinesis list-streams --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── EventBridge ───────────────────────────────────────────────────────
+
+EVENTS_PUT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "source": {"type": "string"},
+        "detail_type": {"type": "string"},
+        "detail": {"type": "string"},
+        "bus_name": {"type": "string", "default": "default"},
+    },
+    "required": ["source", "detail_type", "detail"],
+}
+EVENTS_LIST_RULES_SCHEMA = {"type": "object", "properties": {"bus_name": {"type": "string", "default": "default"}}}
+EVENTS_LIST_BUSES_SCHEMA = {"type": "object", "properties": {}}
+
+def make_events_put(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        detail = _quote(params["detail"])
+        cmd = f"{env} aws events put-events --entries '[{{\"Source\":\"{params['source']}\",\"DetailType\":\"{params['detail_type']}\",\"Detail\":\"{detail}\",\"EventBusName\":\"{params.get('bus_name','default')}\"}}]' --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_events_list_rules(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        bus = params.get("bus_name", "default")
+        cmd = f"{env} aws events list-rules --event-bus-name {bus} --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_events_list_buses(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws events list-event-buses --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── SSM Parameter Store ───────────────────────────────────────────────
+
+SSM_GET_SCHEMA = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}},
+    "required": ["name"],
+}
+SSM_PUT_SCHEMA = {
+    "type": "object",
+    "properties": {"name": {"type": "string"}, "value": {"type": "string"}, "param_type": {"type": "string", "default": "String"}},
+    "required": ["name", "value"],
+}
+SSM_LIST_SCHEMA = {"type": "object", "properties": {}}
+
+def make_ssm_get(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws ssm get-parameter --name {params['name']} --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_ssm_put(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        val = _quote(params["value"])
+        ptype = params.get("param_type", "String")
+        cmd = f"{env} aws ssm put-parameter --name {params['name']} --value '{val}' --type {ptype} --overwrite --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_ssm_list(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws ssm describe-parameters --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── CloudWatch ────────────────────────────────────────────────────────
+
+CW_PUT_METRIC_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "namespace": {"type": "string"},
+        "metric_name": {"type": "string"},
+        "value": {"type": "number"},
+        "unit": {"type": "string", "default": "Count"},
+    },
+    "required": ["namespace", "metric_name", "value"],
+}
+CW_LIST_METRICS_SCHEMA = {"type": "object", "properties": {"namespace": {"type": "string"}}}
+
+def make_cw_put_metric(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        ns = params["namespace"]
+        mn = params["metric_name"]
+        val = params["value"]
+        unit = params.get("unit", "Count")
+        cmd = f"{env} aws cloudwatch put-metric-data --namespace {ns} --metric-name {mn} --value {val} --unit {unit} --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_cw_list_metrics(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        ns_flag = f"--namespace {params['namespace']}" if params.get("namespace") else ""
+        cmd = f"{env} aws cloudwatch list-metrics {ns_flag} --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── IAM ───────────────────────────────────────────────────────────────
+
+IAM_CREATE_USER_SCHEMA = {"type": "object", "properties": {"user_name": {"type": "string"}}, "required": ["user_name"]}
+IAM_LIST_USERS_SCHEMA = {"type": "object", "properties": {}}
+IAM_LIST_ROLES_SCHEMA = {"type": "object", "properties": {}}
+
+def make_iam_create_user(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws iam create-user --user-name {params['user_name']} --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_iam_list_users(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws iam list-users --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+def make_iam_list_roles(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws iam list-roles --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── StepFunctions ─────────────────────────────────────────────────────
+
+SFN_LIST_SCHEMA = {"type": "object", "properties": {}}
+
+def make_sfn_list(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws stepfunctions list-state-machines --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── API Gateway ───────────────────────────────────────────────────────
+
+APIGW_LIST_SCHEMA = {"type": "object", "properties": {}}
+
+def make_apigw_list(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws apigateway get-rest-apis --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── CloudFormation ────────────────────────────────────────────────────
+
+CFN_LIST_SCHEMA = {"type": "object", "properties": {}}
+
+def make_cfn_list(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws cloudformation list-stacks --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler
+
+
+# ── Route53 ───────────────────────────────────────────────────────────
+
+R53_LIST_SCHEMA = {"type": "object", "properties": {}}
+
+def make_r53_list(container_id, docker_runtime, endpoint_url, access_key, secret_key, region="us-east-1"):
+    async def handler(params):
+        env = _aws_env(endpoint_url, access_key, secret_key, region)
+        cmd = f"{env} aws route53 list-hosted-zones --endpoint-url {endpoint_url}"
+        return await docker_runtime.exec_in_container(container_id, cmd)
+    return handler

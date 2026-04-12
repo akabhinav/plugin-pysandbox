@@ -37,13 +37,25 @@ class TestLocalStackPlugin:
         plugin = get_plugin("localstack")
         tools = plugin.get_agent_tools("aws", "abc.sandbox.local", {}, {})
 
-        assert len(tools) == 17
+        # 17 original + 18 new (Kinesis, EventBridge, SSM, CloudWatch,
+        # IAM, StepFunctions, API Gateway, CloudFormation, Route53)
+        assert len(tools) == 35
         names = {t.name for t in tools}
         assert "s3_upload" in names
         assert "s3_list_buckets" in names
         assert "sqs_send" in names
         assert "dynamodb_put" in names
         assert "lambda_invoke" in names
+        # New services
+        assert "kinesis_create_stream" in names
+        assert "events_put" in names
+        assert "ssm_put_parameter" in names
+        assert "cloudwatch_put_metric" in names
+        assert "iam_list_users" in names
+        assert "stepfunctions_list" in names
+        assert "apigateway_list" in names
+        assert "cloudformation_list" in names
+        assert "route53_list_zones" in names
 
     def test_init_commands_create_resources(self):
         plugin = get_plugin("localstack")

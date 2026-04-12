@@ -680,11 +680,17 @@ def tab_devcontainer(api: API_FN, sandbox_id: str) -> None:
 # ── Feature 11: LocalStack Dashboard ──────────────────────────────────────
 
 
+def _ls_terminal(api: API_FN, sandbox_id: str, cmd: str) -> dict | None:
+    """Run a command inside the localstack container via the terminal API."""
+    return api("POST", f"/v1/terminal/{sandbox_id}/localstack", json={"command": cmd})
+
+
 def tab_localstack(api: API_FN, sandbox_id: str) -> None:
     """LocalStack AWS services dashboard — browse S3, SQS, SNS, DynamoDB,
-    Secrets Manager; create/delete resources; see which services are running."""
+    Kinesis, SSM, IAM, CloudWatch, EventBridge, StepFunctions, API Gateway,
+    CloudFormation, Route53, Secrets Manager. All free community services."""
 
-    st.markdown("#### ☁️ LocalStack — AWS Services")
+    st.markdown("#### ☁️ LocalStack — AWS Services Dashboard")
 
     # ── Health / Running Services ─────────────────────────────────────
     st.markdown("##### Running Services")
@@ -694,11 +700,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
         json={"params": {}},
     )
     # Use terminal exec to hit the LocalStack health endpoint directly
-    health = api(
-        "POST",
-        f"/v1/terminal/{sandbox_id}/localstack",
-        json={"command": "curl -sf http://localhost:4566/_localstack/health 2>/dev/null || echo '{}'"},
-    )
+    health = _ls_terminal(api, sandbox_id, "curl -sf http://localhost:4566/_localstack/health 2>/dev/null || echo '{}'")
     if health and health.get("output"):
         try:
             h = json.loads(health["output"])
@@ -725,11 +727,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
         new_bucket = st.text_input("New bucket name", placeholder="my-data", key="ls_new_bucket")
         if st.button("➕ Create Bucket", key="ls_create_bucket", use_container_width=True):
             if new_bucket:
-                result = api(
-                    "POST",
-                    f"/v1/terminal/{sandbox_id}/localstack",
-                    json={"command": f"awslocal s3 mb s3://{new_bucket} 2>&1"},
-                )
+                result = _ls_terminal(api, sandbox_id, f"awslocal s3 mb s3://{new_bucket} 2>&1")
                 if result:
                     st.toast(f"Created bucket: {new_bucket}", icon="🪣")
                     time.sleep(0.3)
@@ -760,11 +758,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
                     if objs:
                         st.code(objs.get("result", ""), language="text")
                 if bc3.button("🗑️", key=f"ls_del_bucket_{bname}"):
-                    api(
-                        "POST",
-                        f"/v1/terminal/{sandbox_id}/localstack",
-                        json={"command": f"awslocal s3 rb s3://{bname} --force 2>&1"},
-                    )
+                    _ls_terminal(api, sandbox_id, f"awslocal s3 rb s3://{bname} --force 2>&1")
                     st.toast(f"Deleted bucket: {bname}", icon="🗑️")
                     time.sleep(0.3)
                     st.rerun()
@@ -789,11 +783,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
                 time.sleep(0.3)
                 st.rerun()
     with col_sqs_1:
-        queues_result = api(
-            "POST",
-            f"/v1/terminal/{sandbox_id}/localstack",
-            json={"command": "awslocal sqs list-queues --output text 2>/dev/null || echo ''"},
-        )
+        queues_result = _ls_terminal(api, sandbox_id, "awslocal sqs list-queues --output text 2>/dev/null || echo ''")
         queue_output = (queues_result or {}).get("output", "").strip()
         if queue_output:
             for line in queue_output.splitlines():
@@ -807,11 +797,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
                 if qc2.button("📨 Send", key=f"ls_send_{qname}"):
                     st.session_state[f"ls_sqs_send_target"] = qname
                 if qc3.button("🗑️", key=f"ls_del_queue_{qname}"):
-                    api(
-                        "POST",
-                        f"/v1/terminal/{sandbox_id}/localstack",
-                        json={"command": f"awslocal sqs delete-queue --queue-url http://localhost:4566/000000000000/{qname} 2>&1"},
-                    )
+                    _ls_terminal(api, sandbox_id, f"awslocal sqs delete-queue --queue-url http://localhost:4566/000000000000/{qname} 2>&1")
                     st.toast(f"Deleted queue: {qname}", icon="🗑️")
                     time.sleep(0.3)
                     st.rerun()
@@ -852,11 +838,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
                 time.sleep(0.3)
                 st.rerun()
     with col_sns_1:
-        topics_result = api(
-            "POST",
-            f"/v1/terminal/{sandbox_id}/localstack",
-            json={"command": "awslocal sns list-topics --output text 2>/dev/null || echo ''"},
-        )
+        topics_result = _ls_terminal(api, sandbox_id, "awslocal sns list-topics --output text 2>/dev/null || echo ''")
         topic_output = (topics_result or {}).get("output", "").strip()
         if topic_output:
             for line in topic_output.splitlines():
@@ -872,11 +854,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
 
     # ── DynamoDB Tables ───────────────────────────────────────────────
     st.markdown("##### 🗃️ DynamoDB Tables")
-    tables_result = api(
-        "POST",
-        f"/v1/terminal/{sandbox_id}/localstack",
-        json={"command": "awslocal dynamodb list-tables --output text 2>/dev/null || echo ''"},
-    )
+    tables_result = _ls_terminal(api, sandbox_id, "awslocal dynamodb list-tables --output text 2>/dev/null || echo ''")
     table_output = (tables_result or {}).get("output", "").strip()
     if table_output:
         for line in table_output.splitlines():
@@ -907,11 +885,7 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
                     time.sleep(0.3)
                     st.rerun()
     with col_sec_1:
-        secrets_result = api(
-            "POST",
-            f"/v1/terminal/{sandbox_id}/localstack",
-            json={"command": "awslocal secretsmanager list-secrets --output text 2>/dev/null || echo ''"},
-        )
+        secrets_result = _ls_terminal(api, sandbox_id, "awslocal secretsmanager list-secrets --output text 2>/dev/null || echo ''")
         sec_output = (secrets_result or {}).get("output", "").strip()
         if sec_output and "None" not in sec_output:
             for line in sec_output.splitlines():
@@ -924,6 +898,126 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
 
     st.divider()
 
+    # ── Kinesis Streams ───────────────────────────────────────────────
+    st.markdown("##### 🌊 Kinesis Streams")
+    kin_result = _ls_terminal(api, sandbox_id, "awslocal kinesis list-streams --output text 2>/dev/null || echo ''")
+    kin_out = (kin_result or {}).get("output", "").strip()
+    col_kin_1, col_kin_2 = st.columns([3, 1])
+    with col_kin_2:
+        new_stream = st.text_input("Stream name", placeholder="events-stream", key="ls_new_stream")
+        if st.button("➕ Create Stream", key="ls_create_stream", use_container_width=True):
+            if new_stream:
+                _ls_terminal(api, sandbox_id, f"awslocal kinesis create-stream --stream-name {new_stream} --shard-count 1 2>&1")
+                st.toast(f"Created stream: {new_stream}", icon="🌊")
+                time.sleep(0.3)
+                st.rerun()
+    with col_kin_1:
+        if kin_out:
+            for line in kin_out.splitlines():
+                line = line.strip()
+                if line and not line.startswith("STREAM"):
+                    st.markdown(f"🌊 **{line}**")
+        else:
+            st.caption("No streams yet")
+
+    st.divider()
+
+    # ── SSM Parameter Store ───────────────────────────────────────────
+    st.markdown("##### 📋 SSM Parameter Store")
+    col_ssm_1, col_ssm_2 = st.columns([3, 1])
+    with col_ssm_2:
+        with st.form("ls_ssm_form"):
+            ssm_name = st.text_input("Parameter name", placeholder="/app/db-host", key="ls_ssm_name")
+            ssm_val = st.text_input("Value", key="ls_ssm_val")
+            if st.form_submit_button("📋 Store Parameter"):
+                if ssm_name and ssm_val:
+                    _ls_terminal(api, sandbox_id,
+                        f"awslocal ssm put-parameter --name {ssm_name} --value '{ssm_val}' --type String --overwrite 2>&1")
+                    st.toast(f"Stored: {ssm_name}", icon="📋")
+                    time.sleep(0.3)
+                    st.rerun()
+    with col_ssm_1:
+        ssm_result = _ls_terminal(api, sandbox_id, "awslocal ssm describe-parameters --output text 2>/dev/null || echo ''")
+        ssm_out = (ssm_result or {}).get("output", "").strip()
+        if ssm_out:
+            for line in ssm_out.splitlines():
+                line = line.strip()
+                if line:
+                    st.markdown(f"📋 {line}")
+        else:
+            st.caption("No parameters yet")
+
+    st.divider()
+
+    # ── IAM / CloudWatch / Other Services ─────────────────────────────
+    st.markdown("##### 📊 Other AWS Services")
+    svc_tabs = st.tabs(["👤 IAM", "📊 CloudWatch", "🔄 StepFunctions", "🌐 API Gateway", "📦 CloudFormation", "🗺️ Route53", "📡 EventBridge"])
+
+    with svc_tabs[0]:  # IAM
+        iam_result = _ls_terminal(api, sandbox_id, "awslocal iam list-users --output text 2>/dev/null || echo ''")
+        iam_out = (iam_result or {}).get("output", "").strip()
+        new_user = st.text_input("Create IAM user", placeholder="dev-user", key="ls_iam_user")
+        if st.button("➕ Create User", key="ls_create_user"):
+            if new_user:
+                _ls_terminal(api, sandbox_id, f"awslocal iam create-user --user-name {new_user} 2>&1")
+                st.toast(f"Created IAM user: {new_user}", icon="👤")
+                time.sleep(0.3)
+                st.rerun()
+        if iam_out:
+            st.code(iam_out, language="text")
+        else:
+            st.caption("No IAM users yet")
+
+    with svc_tabs[1]:  # CloudWatch
+        cw_result = _ls_terminal(api, sandbox_id, "awslocal cloudwatch list-metrics --output text 2>/dev/null | head -20 || echo ''")
+        cw_out = (cw_result or {}).get("output", "").strip()
+        if cw_out:
+            st.code(cw_out, language="text")
+        else:
+            st.caption("No CloudWatch metrics yet")
+
+    with svc_tabs[2]:  # StepFunctions
+        sfn_result = _ls_terminal(api, sandbox_id, "awslocal stepfunctions list-state-machines --output text 2>/dev/null || echo ''")
+        sfn_out = (sfn_result or {}).get("output", "").strip()
+        if sfn_out:
+            st.code(sfn_out, language="text")
+        else:
+            st.caption("No state machines yet")
+
+    with svc_tabs[3]:  # API Gateway
+        apigw_result = _ls_terminal(api, sandbox_id, "awslocal apigateway get-rest-apis --output text 2>/dev/null || echo ''")
+        apigw_out = (apigw_result or {}).get("output", "").strip()
+        if apigw_out:
+            st.code(apigw_out, language="text")
+        else:
+            st.caption("No REST APIs yet")
+
+    with svc_tabs[4]:  # CloudFormation
+        cfn_result = _ls_terminal(api, sandbox_id, "awslocal cloudformation list-stacks --output text 2>/dev/null || echo ''")
+        cfn_out = (cfn_result or {}).get("output", "").strip()
+        if cfn_out:
+            st.code(cfn_out, language="text")
+        else:
+            st.caption("No stacks yet")
+
+    with svc_tabs[5]:  # Route53
+        r53_result = _ls_terminal(api, sandbox_id, "awslocal route53 list-hosted-zones --output text 2>/dev/null || echo ''")
+        r53_out = (r53_result or {}).get("output", "").strip()
+        if r53_out:
+            st.code(r53_out, language="text")
+        else:
+            st.caption("No hosted zones yet")
+
+    with svc_tabs[6]:  # EventBridge
+        eb_result = _ls_terminal(api, sandbox_id, "awslocal events list-rules --output text 2>/dev/null || echo ''")
+        eb_out = (eb_result or {}).get("output", "").strip()
+        if eb_out:
+            st.code(eb_out, language="text")
+        else:
+            st.caption("No EventBridge rules yet")
+
+    st.divider()
+
     # ── Quick AWS CLI ─────────────────────────────────────────────────
     st.markdown("##### 💻 AWS CLI (awslocal)")
     cmd = st.text_input(
@@ -933,10 +1027,6 @@ def tab_localstack(api: API_FN, sandbox_id: str) -> None:
     )
     if st.button("▶️ Run", key="ls_run_cmd", use_container_width=True):
         if cmd:
-            result = api(
-                "POST",
-                f"/v1/terminal/{sandbox_id}/localstack",
-                json={"command": cmd},
-            )
+            result = _ls_terminal(api, sandbox_id, cmd)
             if result:
                 st.code(result.get("output", ""), language="text")
